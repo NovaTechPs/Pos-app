@@ -5,6 +5,7 @@ plugins {
 }
 
 android {
+    buildFeatures { aidl = true }
     namespace = "com.example.waslapos_app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion

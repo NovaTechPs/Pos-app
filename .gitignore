@@ -32,6 +32,7 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+/tmp/
 
 # Symbolication related
 app.*.symbols
@@ -46,3 +47,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Built APK/AAB copies
+/output/
