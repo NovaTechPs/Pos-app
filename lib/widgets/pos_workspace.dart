@@ -15,6 +15,7 @@ import 'customer_picker.dart';
 import 'product_add_dialog.dart';
 import '../models/product_catalog.dart';
 import '../services/api_client.dart';
+import '../services/barcode_service.dart';
 
 part 'pos_desktop.dart';
 
@@ -185,6 +186,59 @@ class _PosWorkspaceState extends State<PosWorkspace> {
     }
     _filterQuery = query;
     return _filteredProducts = _filterIndex!.search(query, null);
+  }
+
+  /// Desktop "عروض" filter, as on the web POS.
+  bool _offersOnly = false;
+  static bool _hasOffer(dynamic product) =>
+      (SaleData.number(product['offer_quantity']) ?? 0) > 0 &&
+      SaleData.number(product['offer_price']) != null;
+  List<dynamic>? _offerSource, _offerProducts;
+  List<dynamic> get _deskProducts {
+    final products = _visibleProducts;
+    if (!_offersOnly) return products;
+    if (!identical(_offerSource, products)) {
+      _offerSource = products;
+      _offerProducts = products.where(_hasOffer).toList(growable: false);
+    }
+    return _offerProducts!;
+  }
+
+  /// Web: Enter in the search adds an exact barcode/number match or the only
+  /// result; otherwise it moves to the first result.
+  void _submitCatalogSearch() {
+    _catalogSearchDebounce?.cancel();
+    final text = _catalogSearch.text.trim();
+    if (_catalogQuery != text) setState(() => _catalogQuery = text);
+    final products = _deskProducts;
+    if (text.isEmpty || products.isEmpty) return;
+    final code = BarcodeService.normalize(text);
+    final exact = products.where(
+      (product) =>
+          BarcodeService.codes(product).contains(code) ||
+          BarcodeService.normalize(product['product_number']) == code,
+    );
+    final match = exact.length == 1
+        ? exact.single
+        : products.length == 1
+        ? products.single
+        : null;
+    if (match != null) {
+      _selectProduct(Map<String, dynamic>.from(match));
+    } else {
+      _productsKeyboard.currentState?.selectFirst();
+    }
+  }
+
+  void _showOffers(bool value) {
+    setState(() => _offersOnly = value);
+    if (widget.selectedCategoryId != null) widget.onCategory(null);
+  }
+
+  void _clearCatalogSearch() {
+    _catalogSearchDebounce?.cancel();
+    _catalogSearch.clear();
+    setState(() => _catalogQuery = '');
   }
 
   bool _keyboardEnabled = false;

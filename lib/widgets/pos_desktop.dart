@@ -638,10 +638,24 @@ extension _ReferenceDesktop on _PosWorkspaceState {
               ),
               const SizedBox(height: 20),
               Focus(
+                // Web: ↓ first result · Enter add/submit · Esc clear.
                 onKeyEvent: (_, event) {
-                  if (event is KeyDownEvent &&
-                      event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                    _productsKeyboard.currentState?.selectFirst();
+                  if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                  final key = event.logicalKey;
+                  if (key == LogicalKeyboardKey.arrowDown) {
+                    if (_deskProducts.isNotEmpty) {
+                      _productsKeyboard.currentState?.selectFirst();
+                    }
+                    return KeyEventResult.handled;
+                  }
+                  if (key == LogicalKeyboardKey.enter ||
+                      key == LogicalKeyboardKey.numpadEnter) {
+                    _submitCatalogSearch();
+                    return KeyEventResult.handled;
+                  }
+                  if (key == LogicalKeyboardKey.escape &&
+                      _catalogSearch.text.isNotEmpty) {
+                    _clearCatalogSearch();
                     return KeyEventResult.handled;
                   }
                   return KeyEventResult.ignored;
@@ -685,15 +699,265 @@ extension _ReferenceDesktop on _PosWorkspaceState {
             ],
           ),
         ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: _catalog(),
-          ),
-        ),
+        _referenceFilters(),
+        Expanded(child: _referenceProductTable()),
       ],
     ),
   );
+
+  Widget _referenceFilter(String label, bool selected, VoidCallback onTap) =>
+      Padding(
+        padding: const EdgeInsetsDirectional.only(end: 6),
+        child: SizedBox(
+          height: 34,
+          child: TextButton(
+            onPressed: onTap,
+            style: TextButton.styleFrom(
+              backgroundColor: selected ? _blue : Colors.white,
+              foregroundColor: selected ? Colors.white : _slate,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: selected ? _blue : _line),
+              ),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+      );
+
+  /// Web shows only "الكل" and "عروض" above the product table.
+  Widget _referenceFilters() => Container(
+    color: Colors.white,
+    padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+    child: Row(
+      children: [
+        _referenceFilter('الكل', !_offersOnly, () => _showOffers(false)),
+        _referenceFilter('عروض', _offersOnly, () => _showOffers(true)),
+      ],
+    ),
+  );
+
+  static const _rowExtent = 60.0;
+  static const _rose = Color(0xFFE11D48);
+
+  /// Web-style product table: one product per row, ↑/↓ move, Enter adds.
+  Widget _referenceProductTable() {
+    final products = _deskProducts;
+    final scale = math.max(1.0, MediaQuery.textScalerOf(context).scale(1));
+    final extent = _rowExtent * scale;
+    const headerStyle = TextStyle(
+      color: Colors.white,
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+    );
+    return Column(
+      children: [
+        Container(
+          key: const Key('pos-product-table-header'),
+          color: const Color(0xFF1E293B),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          child: const Row(
+            children: [
+              Expanded(
+                child: Text('الصنف / رقم الصنف / الباركود', style: headerStyle),
+              ),
+              SizedBox(
+                width: 76,
+                child: Text(
+                  'سعر البيع',
+                  textAlign: TextAlign.center,
+                  style: headerStyle,
+                ),
+              ),
+              SizedBox(
+                width: 76,
+                child: Text(
+                  'المتوفر',
+                  textAlign: TextAlign.center,
+                  style: headerStyle,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: products.isEmpty
+              ? Center(
+                  child: Text(
+                    _offersOnly ? 'لا توجد عروض' : 'لا توجد منتجات مطابقة',
+                    style: const TextStyle(color: Color(0xFF64748B)),
+                  ),
+                )
+              : PosProductKeyboard(
+                  key: _productsKeyboard,
+                  count: products.length,
+                  columns: 1,
+                  stride: extent,
+                  leading: 0,
+                  controller: _productsScroll,
+                  onActivate: (index) {
+                    if (!widget.busy && !widget.repricing) {
+                      _selectProduct(
+                        Map<String, dynamic>.from(products[index]),
+                      );
+                    }
+                  },
+                  builder: (node, selected, focused) => ListView.builder(
+                    controller: _productsScroll,
+                    itemExtent: extent,
+                    itemCount: products.length,
+                    itemBuilder: (context, index) => _referenceProductRow(
+                      products[index],
+                      index,
+                      focused && selected == index,
+                    ),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _referenceProductRow(dynamic raw, int index, bool active) {
+    final product = raw as Map;
+    final price = widget.priceFor(product);
+    final stock = StockPreview.quantities(product, widget.cart);
+    final available = stock.total ?? stock.local;
+    final soldOut = available != null && available <= 0;
+    final barcode = '${product['barcode'] ?? ''}'.trim();
+    final offerQuantity = SaleData.number(product['offer_quantity']) ?? 0;
+    final offerPrice = SaleData.number(product['offer_price']);
+    const muted = TextStyle(fontSize: 9.5, color: Color(0xFF64748B));
+    return Material(
+      key: ValueKey('pos-product-$index'),
+      color: active
+          ? const Color(0xFFEEF2FF)
+          : soldOut
+          ? const Color(0xFFFFF1F2)
+          : Colors.white,
+      child: InkWell(
+        canRequestFocus: false,
+        hoverColor: const Color(0xFFEEF2FF),
+        onTap: widget.busy || widget.repricing
+            ? null
+            : () => _selectProduct(Map<String, dynamic>.from(product)),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            border: active
+                ? Border.all(color: const Color(0xFF6366F1), width: 2)
+                : const Border(bottom: BorderSide(color: _line)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            product['name']?.toString() ?? 'منتج',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: _slate,
+                            ),
+                          ),
+                        ),
+                        if (soldOut) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFE4E6),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: const Text(
+                              'نافد',
+                              style: TextStyle(fontSize: 9, color: _rose),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'رقم: ${product['product_number'] ?? product['id'] ?? '—'}'
+                      '    باركود: ${barcode.isEmpty ? '—' : barcode}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: muted,
+                    ),
+                    if (offerQuantity > 0 && offerPrice != null)
+                      Text(
+                        'عرض ${_quantity(offerQuantity)} بـ ${_money(offerPrice)}',
+                        maxLines: 1,
+                        style: const TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF047857),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 76,
+                child: Text(
+                  price == null ? 'غير مسعّر' : _money(price),
+                  textAlign: TextAlign.center,
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: price == null ? _rose : _blue,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 76,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: soldOut
+                          ? const Color(0xFFFFE4E6)
+                          : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _stockLabel(product),
+                      textDirection: TextDirection.ltr,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: soldOut ? _rose : _slate,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _matchedDesktop() {
     final ready =

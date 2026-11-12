@@ -428,8 +428,7 @@ void main() {
         await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
         await tester.pumpAndSettle();
         final search = find.byKey(const Key('pos-catalog-search'));
-        await tester.tap(find.widgetWithText(ChoiceChip, 'عام'));
-        await tester.pumpAndSettle();
+        // Desktop matches the web POS: all products, no category chips.
         await tester.enterText(search, 'قهوة');
         await tester.pump(const Duration(milliseconds: 120));
         expect(find.byKey(const ValueKey('pos-product-1')), findsNothing);
@@ -453,6 +452,46 @@ void main() {
       },
     );
   }
+
+  testDesktopWidgets(
+    'desktop product search follows the web keys: Enter adds an exact code, Esc clears, offers filter',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      mockServer(catalogSize: 6);
+      await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
+      await tester.pumpAndSettle();
+      PosWorkspace workspace() =>
+          tester.widget<PosWorkspace>(find.byType(PosWorkspace));
+      final search = find.byKey(const Key('pos-catalog-search'));
+      expect(find.byKey(const Key('pos-product-table-header')), findsOneWidget);
+      expect(find.text('عروض'), findsOneWidget);
+
+      await tester.enterText(search, 'ITEM4');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(workspace().cart.single['product_id'], 4);
+      expect(tester.widget<TextField>(search).controller!.text, isEmpty);
+      expect(workspace().barcodeFocus.hasFocus, isTrue);
+
+      await tester.enterText(search, 'صنف');
+      await tester.pump(const Duration(milliseconds: 120));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(search).controller!.text, isEmpty);
+      expect(find.byKey(const ValueKey('pos-product-1')), findsOneWidget);
+
+      await tester.tap(find.text('عروض'));
+      await tester.pumpAndSettle();
+      expect(find.text('لا توجد عروض'), findsOneWidget);
+      await tester.tap(find.text('الكل'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('pos-product-0')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testDesktopWidgets(
     'F4 cancellation preserves the cart and confirmation clears it without submitting a sale',

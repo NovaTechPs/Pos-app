@@ -260,9 +260,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       setState(() {
         _categories = categories;
         _selectedCustomerId = customerId;
-        _selectedCategoryId = categories.isEmpty
-            ? null
-            : SaleData.id(categories.first['id']);
+        _selectedCategoryId = null; // All products first, as on the web POS.
         _cart
           ..clear()
           ..addAll(repriced);
@@ -479,9 +477,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         _activeShift = activeShift;
         _categories = data[0];
         _customers = data[1];
-        _selectedCategoryId = _categories.isEmpty
-            ? null
-            : SaleData.id(_categories.first['id']);
+        _selectedCategoryId = null; // All products first, as on the web POS.
         _isLoading = false;
       });
       if (activeShift == null) {
@@ -2517,7 +2513,8 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       LogicalKeyboardKey.f8 => _editInvoiceNotes,
       LogicalKeyboardKey.f9 => _giftLine,
       LogicalKeyboardKey.f10 => _focusCatalogSearch,
-      LogicalKeyboardKey.escape => _confirmClearCart,
+      // Esc never empties the invoice (as on the web): it closes dialogs and
+      // clears the product search; F4 starts a new invoice.
       _ => null,
     };
     if (action == null || event is KeyUpEvent) return false;

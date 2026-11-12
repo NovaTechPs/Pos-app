@@ -10,9 +10,13 @@ class PosProductKeyboard extends StatefulWidget {
     required this.controller,
     required this.onActivate,
     required this.builder,
+    this.leading = 12,
   });
   final int count, columns;
   final double stride;
+
+  /// Scroll padding above the first row, used to keep the selection visible.
+  final double leading;
   final ScrollController controller;
   final ValueChanged<int> onActivate;
   final Widget Function(FocusNode node, int selected, bool focused) builder;
@@ -69,7 +73,8 @@ class PosProductKeyboardState extends State<PosProductKeyboard> {
       setState(() => selected = next.clamp(0, widget.count - 1));
       if (widget.controller.hasClients) {
         final position = widget.controller.position;
-        final top = (selected ~/ widget.columns) * widget.stride + 12;
+        final top =
+            (selected ~/ widget.columns) * widget.stride + widget.leading;
         final target = top < position.pixels
             ? top
             : top + widget.stride > position.pixels + position.viewportDimension
