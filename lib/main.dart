@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path_provider/path_provider.dart';
@@ -9,14 +10,16 @@ import 'screens/pos_shell.dart';
 import 'services/api_client.dart';
 import 'services/offline_store.dart';
 import 'services/theme_service.dart';
-import 'services/windows_key_storage.dart';
+import 'services/windows_key_storage_stub.dart'
+    if (dart.library.ffi) 'services/windows_key_storage.dart';
 import 'theme/app_theme.dart';
 import 'screens/sync_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await WindowsKeyStorage.install();
-  if (Platform.isAndroid) {
+  // dart:io Platform checks throw on web.
+  if (!kIsWeb) await WindowsKeyStorage.install();
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
     try {
       final support = await getApplicationSupportDirectory();
       await OfflineStore.useFileCache(
