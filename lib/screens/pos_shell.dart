@@ -306,155 +306,198 @@ class _PosShellState extends State<PosShell> {
                   ],
                 ),
               ),
-            Material(
-              color: const Color(0xFFE8EDF5),
-              child: SizedBox(
-                height: MediaQuery.sizeOf(context).width >= 1050 ? 56 : 46,
-                child: Row(
-                  children: [
-                    PopupMenuButton<String>(
-                      tooltip: 'فتح قسم',
-                      onSelected: (title) {
-                        final screen = _departments[title];
-                        if (screen != null) open(title, screen);
-                      },
-                      itemBuilder: (_) => _departments.keys
-                          .map(
-                            (title) =>
-                                PopupMenuItem(value: title, child: Text(title)),
-                          )
-                          .toList(),
-                      child: Container(
-                        margin: const EdgeInsets.fromLTRB(6, 6, 8, 5),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        height: 35,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.menu, size: 16),
-                            SizedBox(width: 6),
-                            Text(
-                              'فتح قسم',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (var i = 0; i < _tabs.length; i++)
-                              Padding(
-                                key: ObjectKey(_tabs[i]),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 3,
-                                  vertical: 0,
-                                ),
-                                child: Material(
-                                  color: i == _selected
-                                      ? Theme.of(context).colorScheme.primary
-                                      : const Color(0xFFF8FAFC),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(9),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (MediaQuery.sizeOf(context).width >= 1050) _sidebar(),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Material(
+                          color: const Color(0xFFE8EDF5),
+                          child: SizedBox(
+                            height: MediaQuery.sizeOf(context).width >= 1050
+                                ? 56
+                                : 46,
+                            child: Row(
+                              children: [
+                                PopupMenuButton<String>(
+                                  tooltip: 'فتح قسم',
+                                  onSelected: (title) {
+                                    final screen = _departments[title];
+                                    if (screen != null) open(title, screen);
+                                  },
+                                  itemBuilder: (_) => _departments.keys
+                                      .map(
+                                        (title) => PopupMenuItem(
+                                          value: title,
+                                          child: Text(title),
+                                        ),
+                                      )
+                                      .toList(),
+                                  child: Container(
+                                    margin: const EdgeInsets.fromLTRB(
+                                      6,
+                                      6,
+                                      8,
+                                      5,
                                     ),
-                                    side: BorderSide(
-                                      color: i == _selected
-                                          ? Theme.of(context)
-                                                .colorScheme
-                                                .primary
-                                          : const Color(0xFFCBD5E1),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
+                                    height: 35,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      border: Border.all(
+                                        color: const Color(0xFFCBD5E1),
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.menu, size: 16),
+                                        SizedBox(width: 6),
+                                        Text(
+                                          'فتح قسم',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  child: InkWell(
-                                    borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(9),
-                                    ),
-                                    onTap: () {
-                                      FocusManager.instance.primaryFocus
-                                          ?.unfocus();
-                                      setState(() => _selected = i);
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Text(
-                                            _tabs[i].title,
-                                            style: TextStyle(
+                                ),
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: [
+                                        for (var i = 0; i < _tabs.length; i++)
+                                          Padding(
+                                            key: ObjectKey(_tabs[i]),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 3,
+                                              vertical: 0,
+                                            ),
+                                            child: Material(
                                               color: i == _selected
-                                                  ? Colors.white
-                                                  : const Color(0xFF475569),
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
+                                                  ? Theme.of(context)
+                                                        .colorScheme
+                                                        .primary
+                                                  : const Color(0xFFF8FAFC),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    const BorderRadius.vertical(
+                                                      top: Radius.circular(9),
+                                                    ),
+                                                side: BorderSide(
+                                                  color: i == _selected
+                                                      ? Theme.of(context)
+                                                            .colorScheme
+                                                            .primary
+                                                      : const Color(0xFFCBD5E1),
+                                                ),
+                                              ),
+                                              child: InkWell(
+                                                borderRadius:
+                                                    const BorderRadius.vertical(
+                                                      top: Radius.circular(9),
+                                                    ),
+                                                onTap: () {
+                                                  FocusManager
+                                                      .instance
+                                                      .primaryFocus
+                                                      ?.unfocus();
+                                                  setState(() => _selected = i);
+                                                },
+                                                child: Padding(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                      ),
+                                                  child: Row(
+                                                    children: [
+                                                      Text(
+                                                        _tabs[i].title,
+                                                        style: TextStyle(
+                                                          color: i == _selected
+                                                              ? Colors.white
+                                                              : const Color(
+                                                                  0xFF475569,
+                                                                ),
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                      if (i > 0)
+                                                        IconButton(
+                                                          tooltip:
+                                                              'إغلاق ${_tabs[i].title}',
+                                                          onPressed: () =>
+                                                              _close(_tabs[i]),
+                                                          icon: Icon(
+                                                            Icons.close,
+                                                            size: 16,
+                                                            color:
+                                                                i == _selected
+                                                                ? Colors.white
+                                                                : const Color(
+                                                                    0xFF64748B,
+                                                                  ),
+                                                          ),
+                                                        )
+                                                      else
+                                                        const SizedBox(
+                                                          width: 10,
+                                                          height: 40,
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
                                             ),
                                           ),
-                                          if (i > 0)
-                                            IconButton(
-                                              tooltip:
-                                                  'إغلاق ${_tabs[i].title}',
-                                              onPressed: () => _close(_tabs[i]),
-                                              icon: Icon(
-                                                Icons.close,
-                                                size: 16,
-                                                color: i == _selected
-                                                    ? Colors.white
-                                                    : const Color(0xFF64748B),
-                                              ),
-                                            )
-                                          else
-                                            const SizedBox(
-                                              width: 10,
-                                              height: 40,
-                                            ),
-                                        ],
-                                      ),
+                                      ],
                                     ),
                                   ),
                                 ),
-                              ),
-                          ],
+                                if (MediaQuery.sizeOf(context).width < 1050)
+                                  const LogoutButton(),
+                                SyncStatusButton(
+                                  onPressed: () => open(
+                                    'المزامنة والفواتير المحلية',
+                                    const SyncScreen(),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
+                        Expanded(
+                          child: IndexedStack(
+                            index: _selected,
+                            children: [
+                              for (final tab in _tabs)
+                                TickerMode(
+                                  key: ObjectKey(tab),
+                                  enabled: tab == _tabs[_selected],
+                                  child: Navigator(
+                                    key: tab.navigator,
+                                    onGenerateRoute: (_) =>
+                                        MaterialPageRoute<void>(
+                                          builder: (_) => tab.screen,
+                                        ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    if (MediaQuery.sizeOf(context).width < 1050)
-                      const LogoutButton(),
-                    SyncStatusButton(
-                      onPressed: () => open(
-                        'المزامنة والفواتير المحلية',
-                        const SyncScreen(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Expanded(
-              child: IndexedStack(
-                index: _selected,
-                children: [
-                  for (final tab in _tabs)
-                    TickerMode(
-                      key: ObjectKey(tab),
-                      enabled: tab == _tabs[_selected],
-                      child: Navigator(
-                        key: tab.navigator,
-                        onGenerateRoute: (_) =>
-                            MaterialPageRoute<void>(builder: (_) => tab.screen),
-                      ),
-                    ),
+                  ),
                 ],
               ),
             ),
@@ -463,4 +506,184 @@ class _PosShellState extends State<PosShell> {
       ),
     ),
   );
+
+  /// Desktop section sidebar: icons only while selling, labels when expanded.
+  bool _sidebarExpanded = false;
+
+  static const _sidebarGroups = <(String, List<(String, IconData)>)>[
+    (
+      'البيع',
+      [
+        ('نقطة البيع', Icons.point_of_sale_outlined),
+        ('مبيعات الجملة', Icons.local_shipping_outlined),
+        ('مرتجعات المبيعات', Icons.assignment_return_outlined),
+        ('سند قبض مستقل', Icons.receipt_long_outlined),
+        ('سجل الفواتير', Icons.history),
+      ],
+    ),
+    (
+      'الإدارة',
+      [
+        ('لوحة التحكم', Icons.dashboard_outlined),
+        ('شؤون الموظف', Icons.badge_outlined),
+        ('طباعة الباركود', Icons.qr_code_2),
+      ],
+    ),
+    (
+      'النظام',
+      [
+        ('المزامنة والفواتير المحلية', Icons.sync),
+        ('إعدادات الطابعات', Icons.print_outlined),
+      ],
+    ),
+  ];
+
+  Widget _sidebar() => AnimatedContainer(
+    key: const Key('desktop-sidebar'),
+    duration: const Duration(milliseconds: 160),
+    width: _sidebarExpanded ? 224 : 64,
+    decoration: const BoxDecoration(
+      color: Colors.white,
+      border: BorderDirectional(end: BorderSide(color: Color(0xFFE2E8F0))),
+    ),
+    // Labels appear only once the animated width has room for them.
+    child: LayoutBuilder(
+      builder: (_, box) => _sidebarContent(box.maxWidth >= 200),
+    ),
+  );
+
+  Widget _sidebarContent(bool expanded) {
+    final departments = _departments;
+    final current = _tabs[_selected].title;
+    const ink = Color(0xFF0F172A);
+    const muted = Color(0xFF64748B);
+    final primary = Theme.of(context).colorScheme.primary;
+    Widget item(String title, IconData icon) {
+      final selected = title == current;
+      final tile = Material(
+        color: selected ? primary : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          key: ValueKey('sidebar-$title'),
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            final screen = departments[title];
+            if (screen != null) open(title, screen);
+          },
+          child: SizedBox(
+            height: 42,
+            child: Row(
+              mainAxisAlignment: expanded
+                  ? MainAxisAlignment.start
+                  : MainAxisAlignment.center,
+              children: [
+                if (expanded) const SizedBox(width: 12),
+                Icon(icon, size: 21, color: selected ? Colors.white : ink),
+                if (expanded) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: selected ? Colors.white : ink,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: expanded ? tile : Tooltip(message: title, child: tile),
+      );
+    }
+
+    return ClipRect(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+            child: Material(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                key: const Key('sidebar-toggle'),
+                borderRadius: BorderRadius.circular(10),
+                onTap: () =>
+                    setState(() => _sidebarExpanded = !_sidebarExpanded),
+                child: SizedBox(
+                  height: 40,
+                  child: Row(
+                    mainAxisAlignment: expanded
+                        ? MainAxisAlignment.start
+                        : MainAxisAlignment.center,
+                    children: [
+                      if (expanded) const SizedBox(width: 12),
+                      Icon(
+                        expanded ? Icons.menu_open : Icons.menu,
+                        size: 21,
+                        color: ink,
+                      ),
+                      if (expanded) ...[
+                        const SizedBox(width: 12),
+                        const Text(
+                          'الأقسام',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: ink,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              children: [
+                for (final (group, items) in _sidebarGroups)
+                  if (items.any(
+                    (entry) => departments.containsKey(entry.$1),
+                  )) ...[
+                    Padding(
+                      padding: const EdgeInsetsDirectional.fromSTEB(
+                        6,
+                        14,
+                        6,
+                        4,
+                      ),
+                      child: expanded
+                          ? Text(
+                              group,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: muted,
+                              ),
+                            )
+                          : const Divider(height: 1),
+                    ),
+                    for (final (title, icon) in items)
+                      if (departments.containsKey(title)) item(title, icon),
+                  ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

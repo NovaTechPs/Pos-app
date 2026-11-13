@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:waslapos_app/screens/pos_screen.dart';
 import 'package:waslapos_app/screens/pos_shell.dart';
+import 'package:waslapos_app/screens/printer_settings_screen.dart';
 import 'package:waslapos_app/widgets/pos_workspace.dart';
 import 'package:waslapos_app/widgets/checkout_loading_overlay.dart';
 import 'package:waslapos_app/screens/dashboard_screen.dart';
@@ -494,40 +495,100 @@ void main() {
   );
 
   testDesktopWidgets(
-    'the invoice table scrolls to each newly added line',
+    'desktop sidebar: collapsed icons, expands with labels, opens sections, arrows move',
     (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      mockServer(catalogSize: 25);
-      await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
+      mockServer();
+      await tester.pumpWidget(const MaterialApp(home: PosShell(user: user)));
       await tester.pumpAndSettle();
-      final search = find.byKey(const Key('pos-catalog-search'));
-      final table = find.byKey(const Key('pos-invoice-lines'));
-      for (var i = 3; i <= 22; i++) {
-        await tester.enterText(search, 'ITEM$i');
-        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-        await tester.pumpAndSettle();
-        final lines = tester
-            .widget<PosWorkspace>(find.byType(PosWorkspace))
-            .cart
-            .length;
-        final last = find.descendant(
-          of: table,
-          matching: find.text('صنف $i'),
-        );
-        expect(last, findsOneWidget, reason: 'line ${lines - 1} is built');
-        final view = tester.getRect(table);
-        final row = tester.getRect(last);
-        expect(row.top, greaterThanOrEqualTo(view.top - 1));
-        expect(row.bottom, lessThanOrEqualTo(view.bottom + 1));
-      }
-      final scroll = tester.widget<ListView>(table).controller!;
-      expect(scroll.offset, greaterThan(0));
+      final sidebar = find.byKey(const Key('desktop-sidebar'));
+      expect(tester.getSize(sidebar).width, 64);
+      expect(
+        find.descendant(of: sidebar, matching: find.text('سجل الفواتير')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const Key('sidebar-toggle')));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(sidebar).width, 224);
+      expect(
+        find.descendant(of: sidebar, matching: find.text('سجل الفواتير')),
+        findsOneWidget,
+      );
+
+      // ↓ moves between sidebar items with the keyboard.
+      Key? focusedItem() => FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<InkWell>()
+          ?.key;
+      Focus.of(
+        tester.element(
+          find
+              .descendant(
+                of: find.byKey(const ValueKey('sidebar-نقطة البيع')),
+                matching: find.byType(Row),
+              )
+              .first,
+        ),
+      ).requestFocus();
+      await tester.pump();
+      expect(focusedItem(), const ValueKey('sidebar-نقطة البيع'));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(focusedItem(), const ValueKey('sidebar-مبيعات الجملة'));
+
+      await tester.tap(find.byKey(const ValueKey('sidebar-إعدادات الطابعات')));
+      // The printer screen keeps a spinner running while it looks for printers.
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(PrinterSettingsScreen), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('phones and narrow windows have no sidebar', (tester) async {
+    tester.view.physicalSize = const Size(800, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    mockServer();
+    await tester.pumpWidget(const MaterialApp(home: PosShell(user: user)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('desktop-sidebar')), findsNothing);
+  });
+
+  testDesktopWidgets('the invoice table scrolls to each newly added line', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    mockServer(catalogSize: 25);
+    await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
+    await tester.pumpAndSettle();
+    final search = find.byKey(const Key('pos-catalog-search'));
+    final table = find.byKey(const Key('pos-invoice-lines'));
+    for (var i = 3; i <= 22; i++) {
+      await tester.enterText(search, 'ITEM$i');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      final lines = tester
+          .widget<PosWorkspace>(find.byType(PosWorkspace))
+          .cart
+          .length;
+      final last = find.descendant(of: table, matching: find.text('صنف $i'));
+      expect(last, findsOneWidget, reason: 'line ${lines - 1} is built');
+      final view = tester.getRect(table);
+      final row = tester.getRect(last);
+      expect(row.top, greaterThanOrEqualTo(view.top - 1));
+      expect(row.bottom, lessThanOrEqualTo(view.bottom + 1));
+    }
+    final scroll = tester.widget<ListView>(table).controller!;
+    expect(scroll.offset, greaterThan(0));
+    expect(tester.takeException(), isNull);
+  });
 
   testDesktopWidgets(
     'F4 cancellation preserves the cart and confirmation clears it without submitting a sale',
