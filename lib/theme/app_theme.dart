@@ -25,6 +25,9 @@ abstract final class AppTheme {
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: canvas,
+      // Clearly visible keyboard selection (arrow keys in lists and popups),
+      // like the web POS's indigo focus highlight.
+      focusColor: const Color(0xFFDCE3FF),
       fontFamily: 'Segoe UI',
       textTheme: const TextTheme(
         bodyLarge: TextStyle(fontSize: 14),

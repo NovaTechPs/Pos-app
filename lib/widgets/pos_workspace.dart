@@ -69,7 +69,13 @@ class PosWorkspace extends StatefulWidget {
     this.notice,
     this.onLineValue,
     this.onMobileAdd,
+    this.addedLine = -1,
+    this.addCount = 0,
   });
+
+  /// Index of the line just added and a counter bumped on every add; the
+  /// desktop invoice table scrolls to that line each time.
+  final int addedLine, addCount;
 
   final List<dynamic> products, categories, customers;
   final List<Map<String, dynamic>> cart;
@@ -117,6 +123,31 @@ class _PosWorkspaceState extends State<PosWorkspace> {
   }
 
   final _cartKeyboard = PosCartKeyboard();
+  final _invoiceScroll = ScrollController();
+  final _lineKeys = <int, GlobalKey>{};
+  GlobalKey _lineKey(int index) =>
+      _lineKeys.putIfAbsent(index, () => GlobalKey());
+
+  /// Scrolls the invoice table so the just-added line is visible (a new
+  /// line ends up at the bottom, a merged line stays where it is).
+  void _revealAddedLine() {
+    final index = widget.addedLine;
+    final context = _lineKeys[index]?.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
+    } else if (_invoiceScroll.hasClients) {
+      _invoiceScroll.animateTo(
+        _invoiceScroll.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    }
+  }
   final _productsKeyboard = GlobalKey<PosProductKeyboardState>();
   final _productsScroll = ScrollController();
   Widget _numberCell(int row, int col, double value) => PosNumberCell(
@@ -254,6 +285,12 @@ class _PosWorkspaceState extends State<PosWorkspace> {
   @override
   void didUpdateWidget(PosWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.addCount != widget.addCount && widget.addedLine >= 0) {
+      // After this frame lays out the new line.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _revealAddedLine();
+      });
+    }
     if (!identical(oldWidget.products, widget.products)) {
       _filterSource = null;
       _filterIndex = null;
@@ -281,6 +318,7 @@ class _PosWorkspaceState extends State<PosWorkspace> {
   @override
   void dispose() {
     _cartKeyboard.dispose();
+    _invoiceScroll.dispose();
     _productsScroll.dispose();
     _catalogSearchDebounce?.cancel();
     _catalogSearch.dispose();
@@ -874,9 +912,12 @@ class _PosWorkspaceState extends State<PosWorkspace> {
                   ),
                 )
               : ListView(
+                  key: const Key('pos-invoice-lines'),
+                  controller: _invoiceScroll,
                   children: List.generate(widget.cart.length, (index) {
                     final item = widget.cart[index];
                     return Padding(
+                      key: _lineKey(index),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 8,

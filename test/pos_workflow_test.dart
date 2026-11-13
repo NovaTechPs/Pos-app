@@ -494,6 +494,42 @@ void main() {
   );
 
   testDesktopWidgets(
+    'the invoice table scrolls to each newly added line',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      mockServer(catalogSize: 25);
+      await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
+      await tester.pumpAndSettle();
+      final search = find.byKey(const Key('pos-catalog-search'));
+      final table = find.byKey(const Key('pos-invoice-lines'));
+      for (var i = 3; i <= 22; i++) {
+        await tester.enterText(search, 'ITEM$i');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        final lines = tester
+            .widget<PosWorkspace>(find.byType(PosWorkspace))
+            .cart
+            .length;
+        final last = find.descendant(
+          of: table,
+          matching: find.text('صنف $i'),
+        );
+        expect(last, findsOneWidget, reason: 'line ${lines - 1} is built');
+        final view = tester.getRect(table);
+        final row = tester.getRect(last);
+        expect(row.top, greaterThanOrEqualTo(view.top - 1));
+        expect(row.bottom, lessThanOrEqualTo(view.bottom + 1));
+      }
+      final scroll = tester.widget<ListView>(table).controller!;
+      expect(scroll.offset, greaterThan(0));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testDesktopWidgets(
     'F4 cancellation preserves the cart and confirmation clears it without submitting a sale',
     (tester) async {
       var writes = 0;

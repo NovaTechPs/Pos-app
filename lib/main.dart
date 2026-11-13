@@ -13,6 +13,7 @@ import 'services/theme_service.dart';
 import 'services/windows_key_storage_stub.dart'
     if (dart.library.ffi) 'services/windows_key_storage.dart';
 import 'theme/app_theme.dart';
+import 'widgets/popup_arrow_navigation.dart';
 import 'screens/sync_screen.dart';
 
 Future<void> main() async {
@@ -47,6 +48,7 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   String _themeName = 'blue';
   final _navigatorKey = GlobalKey<NavigatorState>();
+  final _popupFocus = PopupAutoFocusObserver();
 
   @override
   void initState() {
@@ -87,6 +89,7 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'Wasla POS',
       navigatorKey: _navigatorKey,
+      navigatorObservers: [_popupFocus],
       locale: const Locale('ar'),
       supportedLocales: const [Locale('ar'), Locale('en')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
@@ -162,7 +165,9 @@ class _MyAppState extends State<MyApp> {
               Expanded(
                 child: AbsorbPointer(
                   absorbing: expired,
-                  child: child ?? const SizedBox.shrink(),
+                  child: PopupArrowNavigation(
+                    child: child ?? const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ],

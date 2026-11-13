@@ -64,6 +64,11 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   bool _isRepricing = false;
   bool _missingBarcodeOpen = false;
   bool _holdPromptOpen = false;
+
+  /// The line the cashier just added (new or merged); the invoice table
+  /// scrolls to it on every add, like the web POS.
+  int _addedLine = -1;
+  int _addCount = 0;
   List<dynamic> _categories = [];
   int? _selectedCategoryId;
   List<dynamic>? _indexedCategories;
@@ -1636,6 +1641,8 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
                 (SaleData.number(item['price']) == price &&
                     (SaleData.number(item['discount']) ?? 0) == 0)),
       );
+      _addCount++;
+      _addedLine = index >= 0 ? index : _cart.length;
       if (index >= 0) {
         _cart[index]['quantity'] =
             (SaleData.number(_cart[index]['quantity']) ?? 0) + quantity;
@@ -2598,6 +2605,8 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
                         absorbing: review,
                         child: PosWorkspace(
                           embedded: PosShell.contains(context),
+                          addedLine: _addedLine,
+                          addCount: _addCount,
                           mergeSimilar: _mergeSimilar,
                           onMergeSimilar: (value) =>
                               setState(() => _mergeSimilar = value),
