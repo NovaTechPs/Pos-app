@@ -12,6 +12,7 @@ import 'pos_screen.dart';
 import 'returns_screen.dart';
 import 'sales_history_screen.dart';
 import 'wholesale_screen.dart';
+import 'customer_visits_screen.dart';
 import 'wholesale_receipt_screen.dart';
 import 'sync_screen.dart';
 import 'printer_settings_screen.dart';
@@ -118,6 +119,7 @@ class _PosShellState extends State<PosShell> {
             salesInvoice: true,
           ),
           'سند قبض مستقل': WholesaleReceiptScreen(user: widget.user),
+          'قائمة الزيارات': CustomerVisitsScreen(user: widget.user),
           'سجل الفواتير': SalesHistoryScreen(user: widget.user),
         }
       : {
@@ -128,6 +130,7 @@ class _PosShellState extends State<PosShell> {
           'لوحة التحكم': DashboardScreen(user: widget.user),
           'مبيعات الجملة': WholesaleScreen(user: widget.user),
           'سند قبض مستقل': WholesaleReceiptScreen(user: widget.user),
+          'قائمة الزيارات': CustomerVisitsScreen(user: widget.user),
           'سجل الفواتير': SalesHistoryScreen(user: widget.user),
           'مرتجعات المبيعات': ReturnsScreen(
             user: widget.user,
