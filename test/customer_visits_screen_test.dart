@@ -13,6 +13,7 @@ class _FakeVisits extends VisitService {
     'id': nextId++,
     'outcome': null,
     'notes': null,
+    'manager_note': customer['id'] == 7 ? 'حصّل 500' : null,
     'customer': {...customer, 'current_balance': 25},
   };
 
@@ -83,6 +84,9 @@ void main() {
       await tester.tap(find.text('إضافة (2)'));
       await tester.pumpAndSettle();
       expect(find.text('تمت زيارة 0 من 2'), findsOneWidget);
+      // The manager's instruction shows on that customer only.
+      expect(find.text('من الإدارة: حصّل 500'), findsOneWidget);
+      expect(find.byKey(const ValueKey('manager-note-2')), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('outcome-1-order')));
       await tester.pumpAndSettle();

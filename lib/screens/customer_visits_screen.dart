@@ -298,6 +298,7 @@ class _VisitCard extends StatelessWidget {
     final customer = Map<String, dynamic>.from(visit['customer'] as Map? ?? {});
     final outcome = visit['outcome'] as String?;
     final notes = '${visit['notes'] ?? ''}'.trim();
+    final managerNote = '${visit['manager_note'] ?? ''}'.trim();
     final balance = SaleData.number(customer['current_balance']) ?? 0;
     return Card(
       shape: RoundedRectangleBorder(
@@ -367,6 +368,18 @@ class _VisitCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (managerNote.isNotEmpty)
+              Container(
+                key: ValueKey('manager-note-${visit['id']}'),
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Text('من الإدارة: $managerNote'),
+              ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
