@@ -8,6 +8,20 @@ abstract final class AppTheme {
 
   static ThemeData get light => lightFor('blue');
 
+  /// Keyboard focus ring drawn outside any focused button, so the selected
+  /// button in a popup is obvious (the default tint was barely visible).
+  static const focusRingColor = Color(0xFF0F172A);
+  static final _focusRing = WidgetStateProperty.resolveWith<BorderSide?>(
+    (states) => states.contains(WidgetState.focused)
+        ? const BorderSide(
+            color: focusRingColor,
+            width: 3,
+            strokeAlign: BorderSide.strokeAlignOutside,
+          )
+        : null,
+  );
+  static final _focusButton = ButtonStyle(side: _focusRing);
+
   static ThemeData lightFor(String themeName) {
     final selectedPrimary = switch (themeName) {
       'orange' => const Color(0xFFEA580C),
@@ -72,8 +86,12 @@ abstract final class AppTheme {
             borderRadius: BorderRadius.circular(14),
           ),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+        ).copyWith(side: _focusRing),
       ),
+      textButtonTheme: TextButtonThemeData(style: _focusButton),
+      filledButtonTheme: FilledButtonThemeData(style: _focusButton),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: _focusButton),
+      iconButtonTheme: IconButtonThemeData(style: _focusButton),
     );
   }
 }
