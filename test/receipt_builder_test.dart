@@ -300,4 +300,62 @@ void main() {
       File('${output.path}/statement-preview.pdf').writeAsBytesSync(statement);
     }
   });
+
+  test(
+    'receipts fit the 72 mm printable width of an 80 mm thermal roll',
+    () async {
+      final bytes = await ReceiptBuilder.build(
+        order: {
+          'invoice_number': 'A1-11',
+          'type': 'pos',
+          'customer_name': 'زبون عام',
+          'subtotal': 10,
+          'total': 10,
+          'paid_amount': 10,
+        },
+        items: [
+          {
+            'name': 'صنف طويل الاسم للتجربة على الطابعة',
+            'quantity': 1.6,
+            'price': 6.25,
+          },
+        ],
+        cashierName: 'كاشير',
+      );
+      final pdf = latin1.decode(bytes);
+      final box = RegExp(r'/MediaBox\s*\[\s*0\s+0\s+([0-9.]+)').firstMatch(pdf);
+      expect(box, isNotNull);
+      expect(double.parse(box!.group(1)!), closeTo(72 * 72 / 25.4, 0.5));
+    },
+  );
+  test('shop invoice layout preview', () async {
+    final bytes = await ReceiptBuilder.build(
+      order: {
+        'invoice_number': 'A1-12',
+        'type': 'pos',
+        'store_name': 'محل الأدوات المنزلية',
+        'customer_name': 'زبون نقدي',
+        'created_at': '2026-11-15T16:07:00',
+        'subtotal': 97,
+        'total': 97,
+        'paid_amount': 97,
+      },
+      items: [
+        {'name': 'لامبة ليد 9 وات', 'quantity': 2, 'price': 3.5},
+        {'name': 'كابل كهرباء 1.5×2', 'quantity': 1, 'price': 25},
+        {'name': 'مفتاح مفرد', 'quantity': 3, 'price': 4},
+        {'name': 'بريزة كهرباء', 'quantity': 2, 'price': 4.5},
+        {'name': 'شريط لاصق شفاف', 'quantity': 1, 'price': 2.5},
+        {'name': 'مفك براغي مقاس وسط', 'quantity': 1, 'price': 7},
+        {'name': 'مطرقة صغيرة', 'quantity': 1, 'price': 15},
+        {'name': 'كماشة متعددة', 'quantity': 1, 'price': 18},
+      ],
+      cashierName: 'كاشير',
+    );
+    expect(bytes.take(4), [37, 80, 68, 70]);
+    if (const bool.fromEnvironment('WRITE_PDF_PREVIEWS')) {
+      Directory('output/pdf').createSync(recursive: true);
+      await File('output/pdf/shop-invoice-preview.pdf').writeAsBytes(bytes);
+    }
+  });
 }

@@ -60,7 +60,10 @@ class PrinterService {
     await PrinterRoutingService.instance.printPdf(
       role: PrintRole.receipt,
       bytes: bytes,
-      format: PdfPageFormat(80 * PdfPageFormat.mm, 297 * PdfPageFormat.mm),
+      format: PdfPageFormat(
+        ReceiptBuilder.printableWidthMm * PdfPageFormat.mm,
+        297 * PdfPageFormat.mm,
+      ),
       name: 'WaslaPOS ${order['invoice_number'] ?? 'Receipt'}',
     );
     developer.log(

@@ -165,7 +165,7 @@ void main() {
       send: (printer, bytes, format, name, useSettings) async {
         jobs.add(printer.url);
         expect(bytes, [37, 80, 68, 70]);
-        expect(useSettings, printer.url != labels.url);
+        expect(useSettings, isTrue);
         return true;
       },
     );

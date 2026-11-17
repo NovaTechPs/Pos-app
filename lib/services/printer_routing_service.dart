@@ -200,13 +200,9 @@ class PrinterRoutingService {
     }
     bool accepted;
     try {
-      accepted = await _send(
-        target,
-        bytes,
-        format,
-        name,
-        role != PrintRole.barcode,
-      );
+      // Every printer keeps its own paper and orientation from its driver. Forcing a wide
+      // label size made Windows print barcode labels sideways and cut off.
+      accepted = await _send(target, bytes, format, name, true);
     } catch (_) {
       _printersFuture = null;
       rethrow;
