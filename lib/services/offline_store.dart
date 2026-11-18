@@ -1,16 +1,24 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'background_json.dart';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'local_database.dart';
+
 /// Account-scoped durable snapshots. A failed write must never count as a sale.
 class OfflineStore {
-  OfflineStore(this.scope, {this.storage = const FlutterSecureStorage()});
+  OfflineStore(
+    this.scope, {
+    this.storage = const FlutterSecureStorage(),
+    LocalDatabase? database,
+  }) : _database = database ?? LocalDatabase.shared;
 
   final String scope;
   final FlutterSecureStorage storage;
+  final LocalDatabase _database;
 
   /// App-private directory for bulky read-only snapshots (catalogs, customers).
   ///
@@ -91,6 +99,9 @@ class OfflineStore {
       await BackgroundJson.decode(body) is Map;
   static Future<void>? _invoiceAllocation;
   static Future<void>? _operationAccess;
+  static final Set<String> _migratedOperationScopes = <String>{};
+  static final Map<String, Future<void>> _operationMigrations =
+      <String, Future<void>>{};
   String get _prefix => 'wasla_offline_v1_${Uri.encodeComponent(scope)}_';
 
   /// A receipt reference on this device; operation_uuid remains the sync key.
@@ -127,32 +138,106 @@ class OfflineStore {
   }
 
   Future<Map<String, dynamic>?> draft(int branchId) async {
+    if (_database.isReady) {
+      try {
+        final saved = await _database.document(
+          scope: scope,
+          collection: 'drafts',
+          documentId: '$branchId',
+        );
+        if (saved != null) {
+          return saved;
+        }
+      } catch (_) {
+        // The encrypted draft is kept as a recovery fallback.
+      }
+    }
     final raw = await storage.read(key: '${_prefix}draft_$branchId');
-    return raw == null ? null : Map<String, dynamic>.from(jsonDecode(raw));
+    if (raw == null) return null;
+    final saved = Map<String, dynamic>.from(jsonDecode(raw));
+    await _saveDocument(
+      collection: 'drafts',
+      documentId: '$branchId',
+      document: saved,
+    );
+    return saved;
   }
 
-  Future<void> saveDraft(int branchId, Map<String, dynamic> draft) =>
-      storage.write(key: '${_prefix}draft_$branchId', value: jsonEncode(draft));
+  Future<void> saveDraft(int branchId, Map<String, dynamic> draft) async {
+    await _saveDocument(
+      collection: 'drafts',
+      documentId: '$branchId',
+      document: draft,
+    );
+    await storage.write(
+      key: '${_prefix}draft_$branchId',
+      value: jsonEncode(draft),
+    );
+  }
 
   Future<List<Map<String, dynamic>>> localHeld(int branchId) async {
+    final collection = 'held_orders_$branchId';
+    if (_database.isReady) {
+      try {
+        final saved = await _database.documents(
+          scope: scope,
+          collection: collection,
+        );
+        if (saved.isNotEmpty) {
+          return saved;
+        }
+      } catch (_) {
+        // Read the previous encrypted records below.
+      }
+    }
     final stored = await storage.readAll();
-    return stored.entries
+    final held = stored.entries
         .where((entry) => entry.key.startsWith('${_prefix}held_${branchId}_'))
         .map((entry) => Map<String, dynamic>.from(jsonDecode(entry.value)))
         .toList();
+    for (final order in held) {
+      final id = order['id']?.toString();
+      if (id != null && id.isNotEmpty) {
+        await _saveDocument(
+          collection: collection,
+          documentId: id,
+          document: order,
+        );
+      }
+    }
+    return held;
   }
 
   Future<void> saveLocalHeld(
     int branchId,
     String id,
     Map<String, dynamic> order,
-  ) => storage.write(
-    key: '${_prefix}held_${branchId}_$id',
-    value: jsonEncode(order),
-  );
+  ) async {
+    await _saveDocument(
+      collection: 'held_orders_$branchId',
+      documentId: id,
+      document: order,
+    );
+    await storage.write(
+      key: '${_prefix}held_${branchId}_$id',
+      value: jsonEncode(order),
+    );
+  }
 
-  Future<void> deleteLocalHeld(int branchId, String id) =>
-      storage.delete(key: '${_prefix}held_${branchId}_$id');
+  Future<void> deleteLocalHeld(int branchId, String id) async {
+    if (_database.isReady) {
+      try {
+        await _database.deleteDocument(
+          scope: scope,
+          collection: 'held_orders_$branchId',
+          documentId: id,
+        );
+      } catch (_) {
+        // The encrypted copy is deleted below regardless.
+      }
+    }
+    await storage.delete(key: '${_prefix}held_${branchId}_$id');
+  }
 
   String _cacheKey(Uri uri) =>
       '${_prefix}cache_${Uri.encodeComponent(uri.toString())}';
@@ -161,6 +246,7 @@ class OfflineStore {
     // Validate before replacing a usable snapshot with a gateway error page.
     if (!await _isJsonObject(body)) return;
     final savedAt = DateTime.now().toUtc().toIso8601String();
+    await _saveDatabaseSnapshot(uri, body, savedAt);
     final file = _cacheFile(_cacheKey(uri));
     if (file != null) {
       await _migrateCache();
@@ -174,6 +260,10 @@ class OfflineStore {
   }
 
   Future<Map<String, dynamic>?> cached(Uri uri) async {
+    final databaseSnapshot = await _databaseSnapshot(uri);
+    if (databaseSnapshot != null) {
+      return databaseSnapshot;
+    }
     final file = _cacheFile(_cacheKey(uri));
     if (file != null) {
       await _migrateCache();
@@ -186,17 +276,42 @@ class OfflineStore {
       final split = raw.indexOf('\n');
       if (split < 0) return null;
       final savedAt = raw.substring(0, split);
-      return {
+      final snapshot = {
         'body': raw.substring(split + 1),
         'saved_at': savedAt.isEmpty ? null : savedAt,
       };
+      await _saveDatabaseSnapshot(
+        uri,
+        snapshot['body'] as String,
+        snapshot['saved_at'] ?? '',
+      );
+      return snapshot;
     }
     final raw = await storage.read(key: _cacheKey(uri));
-    return raw == null ? null : Map<String, dynamic>.from(jsonDecode(raw));
+    if (raw == null) return null;
+    final snapshot = Map<String, dynamic>.from(jsonDecode(raw));
+    final body = snapshot['body'];
+    if (body is String) {
+      await _saveDatabaseSnapshot(
+        uri,
+        body,
+        snapshot['saved_at'] as String? ?? '',
+      );
+    }
+    return snapshot;
   }
 
   /// Cheap existence check that does not read or decrypt the snapshot.
   Future<bool> hasCached(Uri uri) async {
+    if (_database.isReady) {
+      try {
+        if (await _database.hasSnapshot(scope: scope, uri: uri)) {
+          return true;
+        }
+      } catch (_) {
+        // Keep using the existing cache if the database is temporarily unavailable.
+      }
+    }
     final file = _cacheFile(_cacheKey(uri));
     if (file != null) {
       await _migrateCache();
@@ -206,6 +321,13 @@ class OfflineStore {
   }
 
   Future<void> forget(Uri uri) async {
+    if (_database.isReady) {
+      try {
+        await _database.deleteSnapshot(scope: scope, uri: uri);
+      } catch (_) {
+        // Remove the legacy copy even if database cleanup is unavailable.
+      }
+    }
     final file = _cacheFile(_cacheKey(uri));
     if (file != null) {
       await _migrateCache();
@@ -219,11 +341,75 @@ class OfflineStore {
     await storage.delete(key: _cacheKey(uri));
   }
 
+  Future<void> _saveDatabaseSnapshot(
+    Uri uri,
+    String body,
+    String savedAt,
+  ) async {
+    if (!_database.isReady) return;
+    try {
+      await _database.saveSnapshot(
+        scope: scope,
+        uri: uri,
+        body: body,
+        savedAt: savedAt,
+      );
+    } catch (_) {
+      // The existing encrypted/file cache remains the safe fallback.
+    }
+  }
+
+  Future<Map<String, dynamic>?> _databaseSnapshot(Uri uri) async {
+    if (!_database.isReady) return null;
+    try {
+      final snapshot = await _database.snapshot(scope: scope, uri: uri);
+      if (snapshot == null) return null;
+      return snapshot;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _saveDocument({
+    required String collection,
+    required String documentId,
+    required Map<String, dynamic> document,
+  }) async {
+    if (!_database.isReady) return;
+    try {
+      await _database.saveDocument(
+        scope: scope,
+        collection: collection,
+        documentId: documentId,
+        document: document,
+      );
+    } catch (_) {
+      // The existing encrypted value remains the recovery fallback.
+    }
+  }
+
   String _operationKey(String uuid) => '${_prefix}operation_$uuid';
 
   Future<Map<String, dynamic>?> operation(String uuid) async {
+    await _migrateOperationsToDatabase();
+    if (_database.isReady) {
+      try {
+        final saved = await _database.operation(
+          scope: scope,
+          operationUuid: uuid,
+        );
+        if (saved != null) {
+          return saved;
+        }
+      } catch (_) {
+        // A secure-storage record remains available as a fallback.
+      }
+    }
     final raw = await storage.read(key: _operationKey(uuid));
-    return raw == null ? null : Map<String, dynamic>.from(jsonDecode(raw));
+    if (raw == null) return null;
+    final record = Map<String, dynamic>.from(jsonDecode(raw));
+    await _saveDatabaseOperation(record);
+    return record;
   }
 
   // Serialize index changes and reads so two queued sales cannot lose an entry.
@@ -272,6 +458,25 @@ class OfflineStore {
     if (uuid is! String || uuid.isEmpty) {
       throw const FormatException('معرف العملية المحلية مفقود');
     }
+    await _migrateOperationsToDatabase();
+    final hasDatabase = _database.isReady;
+    if (hasDatabase) {
+      await _database.saveOperation(scope: scope, operation: record);
+    }
+    try {
+      await _saveLegacyOperation(record, uuid);
+    } catch (_) {
+      // SQLite is the durable primary store after startup. The legacy encrypted
+      // copy is retained for recovery, but must not make a successfully stored
+      // invoice appear lost.
+      if (!hasDatabase) rethrow;
+    }
+  });
+
+  Future<void> _saveLegacyOperation(
+    Map<String, dynamic> record,
+    String uuid,
+  ) async {
     final ids = await _operationIds();
     final attention = await _attentionIds(ids);
     if (!ids.contains(uuid)) {
@@ -293,7 +498,7 @@ class OfflineStore {
       attention.remove(uuid);
       await _writeAttention(attention, ids.length);
     }
-  });
+  }
 
   static bool _needsAttention(Map<String, dynamic> record) =>
       !const {'confirmed', 'verified_saved'}.contains(record['status']);
@@ -334,6 +539,14 @@ class OfflineStore {
 
   Future<List<Map<String, dynamic>>> pendingOperations() =>
       _withOperations(() async {
+        await _migrateOperationsToDatabase();
+        if (_database.isReady) {
+          try {
+            return await _database.operations(scope: scope, pendingOnly: true);
+          } catch (_) {
+            // Use the old durable index if SQLite is temporarily unavailable.
+          }
+        }
         final ids = await _attentionIds(await _operationIds());
         final records = <Map<String, dynamic>>[];
         for (final id in ids) {
@@ -347,6 +560,14 @@ class OfflineStore {
       });
 
   Future<List<Map<String, dynamic>>> operations() => _withOperations(() async {
+    await _migrateOperationsToDatabase();
+    if (_database.isReady) {
+      try {
+        return await _database.operations(scope: scope);
+      } catch (_) {
+        // Use the old durable index if SQLite is temporarily unavailable.
+      }
+    }
     final ids = await _operationIds();
     final records = <Map<String, dynamic>>[];
     for (final id in ids) {
@@ -358,4 +579,51 @@ class OfflineStore {
     );
     return records;
   });
+
+  Future<void> _migrateOperationsToDatabase() async {
+    if (!_database.isReady || _migratedOperationScopes.contains(scope)) {
+      return;
+    }
+    final current = _operationMigrations[scope];
+    if (current != null) {
+      await current;
+      return;
+    }
+    late final Future<void> migration;
+    migration = () async {
+      try {
+        final ids = await _operationIds();
+        for (final id in ids) {
+          if (await _database.operation(scope: scope, operationUuid: id) !=
+              null) {
+            continue;
+          }
+          final raw = await storage.read(key: _operationKey(id));
+          if (raw == null) {
+            continue;
+          }
+          await _database.saveOperation(
+            scope: scope,
+            operation: Map<String, dynamic>.from(jsonDecode(raw)),
+          );
+        }
+        _migratedOperationScopes.add(scope);
+      } finally {
+        _operationMigrations.remove(scope);
+      }
+    }();
+    _operationMigrations[scope] = migration;
+    await migration;
+  }
+
+  Future<void> _saveDatabaseOperation(Map<String, dynamic> record) async {
+    if (!_database.isReady) {
+      return;
+    }
+    try {
+      await _database.saveOperation(scope: scope, operation: record);
+    } catch (_) {
+      // The encrypted legacy operation remains available for migration/recovery.
+    }
+  }
 }

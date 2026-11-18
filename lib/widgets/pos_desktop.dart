@@ -418,6 +418,7 @@ extension _ReferenceDesktop on _PosWorkspaceState {
                     customers: widget.customers,
                     value: widget.customerId,
                     placeholder: 'إضافة زبون للفاتورة',
+                    onRefresh: widget.onRefreshCustomers,
                     onChanged: widget.onCustomer,
                   ),
                 ),

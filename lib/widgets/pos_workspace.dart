@@ -44,6 +44,7 @@ class PosWorkspace extends StatefulWidget {
     required this.onScan,
     required this.onCategory,
     required this.onCustomer,
+    this.onRefreshCustomers,
     required this.onAdd,
     required this.onQuantity,
     required this.onRemove,
@@ -94,6 +95,7 @@ class PosWorkspace extends StatefulWidget {
   final double? Function(dynamic) priceFor;
   final ValueChanged<String> onBarcode, onSubmitBarcode, onPayment;
   final ValueChanged<int?> onCategory, onCustomer;
+  final Future<List<dynamic>> Function()? onRefreshCustomers;
   final bool Function(Map<String, dynamic>) onAdd;
   final Future<void> Function(Map<String, dynamic>)? onMobileAdd;
   final void Function(int, int) onQuantity;
@@ -148,6 +150,7 @@ class _PosWorkspaceState extends State<PosWorkspace> {
       );
     }
   }
+
   final _productsKeyboard = GlobalKey<PosProductKeyboardState>();
   final _productsScroll = ScrollController();
   Widget _numberCell(int row, int col, double value) => PosNumberCell(
@@ -1157,6 +1160,7 @@ class _PosWorkspaceState extends State<PosWorkspace> {
                       customers: widget.customers,
                       value: widget.customerId,
                       label: 'الزبون / المورد والتسعير',
+                      onRefresh: widget.onRefreshCustomers,
                       onChanged: widget.onCustomer,
                     ),
                 ],

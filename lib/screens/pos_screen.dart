@@ -647,6 +647,15 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<List<dynamic>> _refreshCustomersForPicker() async {
+    final customers = await _customerService.fetchCustomers();
+    if (mounted) {
+      setState(() => _customers = customers);
+    }
+
+    return customers;
+  }
+
   Future<void> _showOpenShiftDialog(int branchId) async {
     if (_isCheckingOut) return;
     final entry = await showAmountDialog(
@@ -2824,6 +2833,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
                                 onCategory: (id) =>
                                     setState(() => _selectedCategoryId = id),
                                 onCustomer: _reloadProductsForCustomer,
+                                onRefreshCustomers: _refreshCustomersForPicker,
                                 onAdd: _addToCart,
                                 onMobileAdd: _addMobileProduct,
                                 onQuantity: _updateQuantity,

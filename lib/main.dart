@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/pos_shell.dart';
 import 'services/api_client.dart';
+import 'services/local_database.dart';
 import 'services/offline_store.dart';
 import 'services/theme_service.dart';
 import 'services/windows_key_storage_stub.dart'
@@ -20,6 +21,14 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // dart:io Platform checks throw on web.
   if (!kIsWeb) await WindowsKeyStorage.install();
+  if (!kIsWeb) {
+    try {
+      await LocalDatabase.shared.initialize();
+    } catch (error) {
+      // The existing encrypted offline queue remains available if SQLite fails.
+      debugPrint('Local database initialization failed: $error');
+    }
+  }
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
     try {
       final support = await getApplicationSupportDirectory();
