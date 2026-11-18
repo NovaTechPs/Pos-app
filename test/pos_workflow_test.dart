@@ -59,6 +59,7 @@ void main() {
     Future<http.Response> Function(Map<String, dynamic>)? onBarcode,
     bool Function()? hasAddedBarcode,
     List<dynamic> Function()? heldOrders,
+    Map<String, dynamic>? Function(http.Request)? savedInvoice,
   }) {
     ApiClient.client = MockClient((request) async {
       onRequest?.call(request);
@@ -145,6 +146,12 @@ void main() {
           'message': 'تم التعليق',
           'order': {'id': 12, 'invoice_number': 'HOLD-12'},
         }, 201);
+      }
+      if (request.url.path.endsWith('/pos/invoices') && savedInvoice != null) {
+        final order = savedInvoice(request);
+        return order == null
+            ? response({'message': 'لا توجد فاتورة'}, 404)
+            : response({'order': order});
       }
       return response({'message': 'unexpected request'}, 500);
     });
@@ -544,6 +551,82 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(PrinterSettingsScreen), findsOneWidget);
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testDesktopWidgets(
+    'a saved invoice opens in the cart for viewing and unlocks with «تعديل»',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final requests = <Uri>[];
+      Map<String, dynamic> invoice(int id, String type) => {
+        'id': id,
+        'invoice_number': 'A1-$id',
+        'type': type,
+        'editable_in_pos': type == 'pos',
+        'created_at': '2026-11-17T19:20:27.000000Z',
+        'customer_name': 'زبون عام',
+        'total': 20,
+        'discount': 0,
+        'items': [
+          {
+            'product_id': 1,
+            'quantity': 2,
+            'unit_price': 10,
+            'total_price': 20,
+            'product': {'id': 1, 'name': 'قهوة'},
+          },
+        ],
+      };
+      mockServer(
+        savedInvoice: (request) {
+          requests.add(request.url);
+          final before = request.url.queryParameters['before'];
+          if (before == null) return invoice(60, 'pos');
+          return before == '60' ? invoice(59, 'wholesale') : null;
+        },
+      );
+      await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
+      await tester.pumpAndSettle();
+
+      var workspace = tester.widget<PosWorkspace>(find.byType(PosWorkspace));
+      workspace.actions['الفاتورة السابقة']!();
+      await tester.pumpAndSettle();
+      expect(requests.single.queryParameters['branch_id'], '1');
+      expect(find.byKey(const Key('pos-viewed-invoice')), findsOneWidget);
+      expect(find.textContaining('فاتورة محفوظة A1-60'), findsOneWidget);
+      workspace = tester.widget<PosWorkspace>(find.byType(PosWorkspace));
+      expect(workspace.cart.single['quantity'], 2);
+      expect(workspace.editingInvoiceId, isNull);
+
+      // Locked: changing the quantity is refused until «تعديل».
+      workspace.onQuantity(0, 1);
+      await tester.pumpAndSettle();
+      workspace = tester.widget<PosWorkspace>(find.byType(PosWorkspace));
+      expect(workspace.cart.single['quantity'], 2);
+
+      // Older web/wholesale invoices come from the server too, but stay view-only here.
+      await tester.tap(find.text('السابقة').last);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('فاتورة محفوظة A1-59'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('pos-unlock-invoice')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('pos-viewed-invoice')), findsOneWidget);
+
+      // Back to the POS invoice, «تعديل» unlocks it for editing.
+      await tester.tap(find.text('التالية').last);
+      await tester.pumpAndSettle();
+      expect(requests.last.queryParameters['after'], '59');
+      expect(find.textContaining('فاتورة محفوظة A1-60'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('pos-unlock-invoice')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('pos-viewed-invoice')), findsNothing);
+      workspace = tester.widget<PosWorkspace>(find.byType(PosWorkspace));
+      expect(workspace.editingInvoiceId, 60);
+      expect(workspace.cart.single['quantity'], 2);
     },
   );
 

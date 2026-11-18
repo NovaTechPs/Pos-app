@@ -24,7 +24,6 @@ import '../models/product_catalog.dart';
 import '../services/api_client.dart';
 import '../widgets/amount_dialog.dart';
 import '../widgets/cart_line_dialog.dart';
-import '../widgets/invoice_browser.dart';
 import '../widgets/operation_review.dart';
 import '../widgets/missing_barcode_dialog.dart';
 import '../services/pos_service.dart';
@@ -110,6 +109,9 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   int? _editingInvoiceId;
   String? _localHeldId;
   Map<String, dynamic>? _viewedInvoice;
+
+  /// A saved invoice shown in the cart for viewing; «تعديل» unlocks it, like the web invoice archive.
+  Map<String, dynamic>? _viewingInvoice;
   Timer? _barcodeDebounce;
   Timer? _searchDebounce;
   StreamSubscription<bool>? _networkSubscription;
@@ -149,13 +151,14 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
     if (!_draftReady) return;
     final store = ApiClient.offlineStore;
     if (store == null) return;
+    final viewing = _viewingInvoice != null;
     final draft = <String, dynamic>{
-      'items': _cart,
-      'customer_id': _selectedCustomerId,
-      'discount': _discount,
-      'delivery_fee': _deliveryFee,
-      'discount_percent': _discountPercent,
-      'notes': _invoiceNotes,
+      'items': viewing ? const [] : _cart,
+      'customer_id': viewing ? null : _selectedCustomerId,
+      'discount': viewing ? 0 : _discount,
+      'delivery_fee': viewing ? 0 : _deliveryFee,
+      'discount_percent': viewing ? null : _discountPercent,
+      'notes': viewing ? '' : _invoiceNotes,
       'payment_method': _paymentMethod,
       'held_order_id': _activeHeldOrderId,
       'invoice_id': _editingInvoiceId,
@@ -1269,6 +1272,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _saveHeldInvoice() async {
+    if (_refuseWhileViewing()) return;
     if (_holdPromptOpen) return;
     if (_editingInvoiceId != null) {
       _showMessage(
@@ -1570,6 +1574,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _addMobileProduct(Map<String, dynamic> product) async {
+    if (_refuseWhileViewing()) return;
     if (_isCheckingOut || _isRepricing) return;
     final price = _productPrice(product);
     if (price == null) {
@@ -1613,6 +1618,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
     double? selectedPrice,
     double quantity = 1,
   }) {
+    if (_refuseWhileViewing()) return false;
     if (_missingBarcodeOpen ||
         _isRepricing ||
         _isCheckingOut ||
@@ -1682,6 +1688,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   void _updateQuantity(int index, int delta) {
+    if (_refuseWhileViewing()) return;
     setState(() {
       _cart[index]['quantity'] += delta;
       if (_cart[index]['quantity'] <= 0) {
@@ -1720,6 +1727,10 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       false;
 
   Future<void> _confirmClearCart() async {
+    if (_viewingInvoice != null) {
+      _closeViewedInvoice();
+      return;
+    }
     if (_cart.isEmpty || _isCheckingOut || _isRepricing) return;
     if (await _confirmReplaceCart(clear: true) && mounted) {
       setState(() {
@@ -1738,6 +1749,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   void _removeItem(int index) {
+    if (_refuseWhileViewing()) return;
     setState(() {
       _cart.removeAt(index);
       if (_cart.isEmpty) {
@@ -1923,6 +1935,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   Future<bool> _editInvoiceNotes({bool forHold = false}) async {
+    if (_refuseWhileViewing()) return false;
     final controller = TextEditingController(text: _invoiceNotes);
     final result = await showDialog<String>(
       context: context,
@@ -2037,7 +2050,9 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       if (query == null || query.trim().isEmpty || !mounted) return;
     }
     try {
-      final currentId = SaleData.id(_viewedInvoice?['id']);
+      final currentId = SaleData.id(
+        _viewingInvoice?['id'] ?? _viewedInvoice?['id'],
+      );
       final order = await _posService.fetchInvoice(
         _branchId,
         search: query?.trim(),
@@ -2045,47 +2060,192 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         after: search || !next ? null : currentId,
       );
       if (!mounted) return;
-      _viewedInvoice = order;
-      final result = await showDialog<Map<String, dynamic>>(
-        context: context,
-        builder: (_) => InvoiceBrowser(
-          order: order,
-          branchId: _branchId,
-          onViewed: (value) => _viewedInvoice = value,
-        ),
-      );
-      if (!mounted || result == null) return;
-      final selected = Map<String, dynamic>.from(result['order']);
-      if (result['action'] == 'delete') {
-        await _deleteSavedInvoice(selected);
-      } else {
-        if (_cart.isNotEmpty && !await _confirmReplaceCart()) return;
-        if (!mounted) return;
-        final lines = SaleData.heldLines(selected);
-        setState(() {
-          _cart
-            ..clear()
-            ..addAll(
-              lines.map(
-                (line) => {...line, 'price_manual': !SaleData.hasOffer(line)},
-              ),
-            );
-          _editingInvoiceId = SaleData.id(selected['id']);
-          _activeHeldOrderId = null;
-          _localHeldId = null;
-          _selectedCustomerId = SaleData.id(selected['customer_id']);
-          _discountPercent = null;
-          _discount = SaleData.number(selected['discount']) ?? 0;
-          _deliveryFee = SaleData.number(selected['delivery_fee']) ?? 0;
-          _invoiceNotes = selected['notes']?.toString() ?? '';
-        });
+      if (_viewingInvoice == null &&
+          _cart.isNotEmpty &&
+          !await _confirmReplaceCart()) {
+        return;
+      }
+      if (!mounted) return;
+      _showSavedInvoice(order);
+    } catch (error) {
+      if (mounted) {
         _showMessage(
-          'تعديل الفاتورة ${selected['invoice_number']}؛ الحفظ يحدّث نفس الفاتورة.',
+          search
+              ? 'تعذر العثور على الفاتورة: $error'
+              : 'لا توجد فاتورة ${next ? 'أحدث' : 'أقدم'}.',
+          isError: true,
+        );
+      }
+    }
+  }
+
+  /// Shows a saved invoice in the cart, locked until «تعديل».
+  void _showSavedInvoice(Map<String, dynamic> order) {
+    final lines = SaleData.heldLines(order);
+    setState(() {
+      _viewedInvoice = order;
+      _viewingInvoice = order;
+      _cart
+        ..clear()
+        ..addAll(
+          lines.map(
+            (line) => {...line, 'price_manual': !SaleData.hasOffer(line)},
+          ),
+        );
+      _editingInvoiceId = null;
+      _activeHeldOrderId = null;
+      _localHeldId = null;
+      _selectedCustomerId = SaleData.id(order['customer_id']);
+      _discountPercent = null;
+      _discount = SaleData.number(order['discount']) ?? 0;
+      _deliveryFee = SaleData.number(order['delivery_fee']) ?? 0;
+      _invoiceNotes = order['notes']?.toString() ?? '';
+    });
+  }
+
+  bool get _viewedInvoiceEditable =>
+      _viewingInvoice?['editable_in_pos'] != false &&
+      (_viewingInvoice?['type'] == null || _viewingInvoice?['type'] == 'pos');
+
+  void _unlockViewedInvoice() {
+    final order = _viewingInvoice;
+    if (order == null) return;
+    if (!_viewedInvoiceEditable) {
+      _showMessage(
+        'هذه فاتورة مبيعات من الويب أو الجملة؛ عدّلها من صفحة فاتورة المبيعات.',
+        isError: true,
+      );
+      return;
+    }
+    if (ApiClient.offline.value) {
+      _showMessage('اتصل بالخادم لتعديل فاتورة محفوظة.', isError: true);
+      return;
+    }
+    setState(() {
+      _editingInvoiceId = SaleData.id(order['id']);
+      _viewingInvoice = null;
+    });
+    _showMessage(
+      'تعديل الفاتورة ${order['invoice_number']}؛ الحفظ يحدّث نفس الفاتورة.',
+    );
+  }
+
+  void _closeViewedInvoice() {
+    setState(() {
+      _viewingInvoice = null;
+      _cart.clear();
+      _editingInvoiceId = null;
+      _selectedCustomerId = null;
+      _invoiceNotes = '';
+      _discountPercent = null;
+      _discount = 0;
+      _deliveryFee = 0;
+      _discountValid = true;
+    });
+    _restoreBarcodeFocus();
+  }
+
+  /// True, with a message, while a saved invoice is only being viewed.
+  bool _refuseWhileViewing() {
+    if (_viewingInvoice == null) return false;
+    _showMessage(
+      'الفاتورة ${_viewingInvoice?['invoice_number'] ?? ''} محفوظة للعرض؛ اضغط «تعديل» لتغييرها.',
+      isError: true,
+    );
+    return true;
+  }
+
+  Future<void> _printViewedInvoice({bool pdf = false}) async {
+    final order = _viewingInvoice;
+    if (order == null) return;
+    final items = SaleData.heldLines(order);
+    SaleData.applyOffers(items);
+    try {
+      if (pdf) {
+        await PrinterService.shareReceipt(
+          order: order,
+          items: items,
+          cashierName: widget.user['name']?.toString() ?? '—',
+        );
+      } else {
+        await PrinterService.printReceipt(
+          order: order,
+          items: items,
+          cashierName: widget.user['name']?.toString() ?? '—',
         );
       }
     } catch (error) {
-      if (mounted) _showMessage('تعذر فتح الفاتورة: $error', isError: true);
+      if (mounted) _showMessage('$error', isError: true);
     }
+  }
+
+  Widget _viewedInvoiceBar() {
+    final order = _viewingInvoice!;
+    final created = DateTime.tryParse('${order['created_at']}')?.toLocal();
+    final when = created == null
+        ? ''
+        : '${created.year}/${created.month.toString().padLeft(2, '0')}/${created.day.toString().padLeft(2, '0')} ${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
+    final customer =
+        order['party']?['name'] ?? order['customer_name'] ?? 'زبون عام';
+    return Material(
+      key: const Key('pos-viewed-invoice'),
+      color: const Color(0xFFFEF3C7),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            const Icon(Icons.lock_outline, color: Color(0xFF92400E)),
+            Text(
+              'فاتورة محفوظة ${order['invoice_number'] ?? ''} — $customer${when.isEmpty ? '' : ' — $when'}',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF78350F),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: _browseInvoice,
+              icon: const Icon(Icons.arrow_forward),
+              label: const Text('السابقة'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _browseInvoice(next: true),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('التالية'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _printViewedInvoice,
+              icon: const Icon(Icons.print),
+              label: const Text('طباعة'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _printViewedInvoice(pdf: true),
+              icon: const Icon(Icons.picture_as_pdf),
+              label: const Text('PDF'),
+            ),
+            if (_viewedInvoiceEditable)
+              OutlinedButton.icon(
+                onPressed: () => _deleteSavedInvoice(_viewingInvoice),
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('حذف'),
+              ),
+            FilledButton.icon(
+              key: const Key('pos-unlock-invoice'),
+              onPressed: _unlockViewedInvoice,
+              icon: const Icon(Icons.edit),
+              label: const Text('تعديل'),
+            ),
+            TextButton.icon(
+              onPressed: _closeViewedInvoice,
+              icon: const Icon(Icons.close),
+              label: const Text('فاتورة جديدة'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteSavedInvoice(Map<String, dynamic>? order) async {
@@ -2114,6 +2274,10 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
     try {
       await _posService.deleteInvoice(SaleData.id(order['id'])!);
       _viewedInvoice = null;
+      if (mounted &&
+          SaleData.id(_viewingInvoice?['id']) == SaleData.id(order['id'])) {
+        _closeViewedInvoice();
+      }
       if (mounted && _editingInvoiceId == SaleData.id(order['id'])) {
         setState(() {
           _cart.clear();
@@ -2197,6 +2361,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _editPercentDiscount() async {
+    if (_refuseWhileViewing()) return;
     if (_isCheckingOut || _isRepricing) return;
     final entry = await showAmountDialog(
       context,
@@ -2215,6 +2380,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _editFinalTotal() async {
+    if (_refuseWhileViewing()) return;
     if (_isCheckingOut || _isRepricing || _cart.isEmpty) return;
     final entry = await showAmountDialog(
       context,
@@ -2240,6 +2406,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _editDelivery() async {
+    if (_refuseWhileViewing()) return;
     if (_isCheckingOut || _isRepricing) return;
     if (!_posService.supportsGiftLines) {
       _showMessage('حدّث خادم Laravel لتفعيل رسوم التوصيل.', isError: true);
@@ -2256,9 +2423,13 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
     _restoreBarcodeFocus();
   }
 
-  Future<void> _giftLine() => _showProducts(gift: true);
+  Future<void> _giftLine() async {
+    if (_refuseWhileViewing()) return;
+    await _showProducts(gift: true);
+  }
 
   Future<void> _editLine(int index) async {
+    if (_refuseWhileViewing()) return;
     if (_isCheckingOut || _isRepricing || index >= _cart.length) return;
     final line = _cart[index];
     final result = await showCartLineDialog(context, line);
@@ -2278,6 +2449,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   void _setLineValue(int index, String field, double value) {
+    if (_refuseWhileViewing()) return;
     if (_isCheckingOut || _isRepricing || index >= _cart.length) return;
     final line = _cart[index];
     if (field != 'quantity' && line['gift'] == true) return;
@@ -2300,6 +2472,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _checkout({bool printReceipt = false}) async {
+    if (_refuseWhileViewing()) return;
     if (_editingInvoiceId != null && ApiClient.offline.value) {
       _showMessage('اتصل بالخادم لحفظ تعديل فاتورة سابقة.', isError: true);
       return;
@@ -2463,6 +2636,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _newInvoice() async {
+    if (_viewingInvoice != null) _closeViewedInvoice();
     if (_cart.isNotEmpty) await _confirmClearCart();
     if (!mounted || _cart.isNotEmpty) return;
     _searchDebounce?.cancel();
@@ -2603,129 +2777,143 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
                       )
                     : AbsorbPointer(
                         absorbing: review,
-                        child: PosWorkspace(
-                          embedded: PosShell.contains(context),
-                          addedLine: _addedLine,
-                          addCount: _addCount,
-                          mergeSimilar: _mergeSimilar,
-                          onMergeSimilar: (value) =>
-                              setState(() => _mergeSimilar = value),
-                          products: products,
-                          categories: _categories,
-                          customers: _customers,
-                          cart: _cart,
-                          barcodeController: _barcodeController,
-                          barcodeFocus: _barcodeFocusNode,
-                          catalogFocus: _catalogFocusNode,
-                          selectedCategoryId: _selectedCategoryId,
-                          customerId: _selectedCustomerId,
-                          subtotal: _subtotal,
-                          discount: _discount,
-                          deliveryFee: _deliveryFee,
-                          editingInvoiceId: _editingInvoiceId,
-                          tax: _taxAmount,
-                          total: _grandTotal,
-                          paymentMethod: _paymentMethod,
-                          cashier: widget.user['name']?.toString() ?? 'الكاشير',
-                          shiftId: _activeShift?['id'],
-                          priceFor: _productPrice,
-                          busy: _isCheckingOut,
-                          repricing: _isRepricing,
-                          onBarcode: _onBarcodeInput,
-                          onSubmitBarcode: _addExactBarcodeMatch,
-                          onScan: _scanBarcode,
-                          onProducts: _focusCatalogSearch,
-                          notice: _checkoutRecord?['status'] == 'confirmed'
-                              ? 'تم حفظ الفاتورة ${_checkoutRecord?['order']?['invoice_number'] ?? ''} على السيرفر.'
-                              : _checkoutRecord?['status'] == 'queued'
-                              ? 'حُفظت الفاتورة محليًا بانتظار المزامنة.'
-                              : null,
-                          onCategory: (id) =>
-                              setState(() => _selectedCategoryId = id),
-                          onCustomer: _reloadProductsForCustomer,
-                          onAdd: _addToCart,
-                          onMobileAdd: _addMobileProduct,
-                          onQuantity: _updateQuantity,
-                          onEditLine: _editLine,
-                          onLineValue: _setLineValue,
-                          onRemove: _removeItem,
-                          onDiscount: (discount) => setState(() {
-                            _discountPercent = null;
-                            _discount = discount;
-                          }),
-                          onTenderValidity: (valid) => _tenderValid = valid,
-                          onDiscountValidity: (valid) =>
-                              setState(() => _discountValid = valid),
-                          onPayment: (method) {
-                            setState(() => _paymentMethod = method);
-                            _restoreBarcodeFocus();
-                          },
-                          onCheckout: _checkout,
-                          onHold: _saveHeldInvoice,
-                          onHeld: _openHeldInvoices,
-                          onClear: _confirmClearCart,
-                          actions: {
-                            'إعادة طباعة آخر فاتورة': _reprintLastReceipt,
-                            'المزامنة': () => PosShell.open(
-                              context,
-                              'المزامنة والفواتير المحلية',
-                              const SyncScreen(),
-                            ),
-                            'لوحة التحكم': () => PosShell.open(
-                              context,
-                              'لوحة التحكم',
-                              DashboardScreen(user: widget.user),
-                            ),
-                            'مبيعات الجملة': () => PosShell.open(
-                              context,
-                              'مبيعات الجملة',
-                              WholesaleScreen(user: widget.user),
-                            ),
-                            if (ApiClient.employee != null)
-                              'شؤون الموظف': () => PosShell.open(
-                                context,
-                                'شؤون الموظف',
-                                EmployeeScreen(
-                                  user: widget.user,
-                                  initialProfile: ApiClient.session ?? {},
-                                ),
+                        child: Column(
+                          children: [
+                            if (_viewingInvoice != null) _viewedInvoiceBar(),
+                            Expanded(
+                              child: PosWorkspace(
+                                embedded: PosShell.contains(context),
+                                addedLine: _addedLine,
+                                addCount: _addCount,
+                                mergeSimilar: _mergeSimilar,
+                                onMergeSimilar: (value) =>
+                                    setState(() => _mergeSimilar = value),
+                                products: products,
+                                categories: _categories,
+                                customers: _customers,
+                                cart: _cart,
+                                barcodeController: _barcodeController,
+                                barcodeFocus: _barcodeFocusNode,
+                                catalogFocus: _catalogFocusNode,
+                                selectedCategoryId: _selectedCategoryId,
+                                customerId: _selectedCustomerId,
+                                subtotal: _subtotal,
+                                discount: _discount,
+                                deliveryFee: _deliveryFee,
+                                editingInvoiceId: _editingInvoiceId,
+                                tax: _taxAmount,
+                                total: _grandTotal,
+                                paymentMethod: _paymentMethod,
+                                cashier:
+                                    widget.user['name']?.toString() ??
+                                    'الكاشير',
+                                shiftId: _activeShift?['id'],
+                                priceFor: _productPrice,
+                                busy: _isCheckingOut,
+                                repricing: _isRepricing,
+                                onBarcode: _onBarcodeInput,
+                                onSubmitBarcode: _addExactBarcodeMatch,
+                                onScan: _scanBarcode,
+                                onProducts: _focusCatalogSearch,
+                                notice:
+                                    _checkoutRecord?['status'] == 'confirmed'
+                                    ? 'تم حفظ الفاتورة ${_checkoutRecord?['order']?['invoice_number'] ?? ''} على السيرفر.'
+                                    : _checkoutRecord?['status'] == 'queued'
+                                    ? 'حُفظت الفاتورة محليًا بانتظار المزامنة.'
+                                    : null,
+                                onCategory: (id) =>
+                                    setState(() => _selectedCategoryId = id),
+                                onCustomer: _reloadProductsForCustomer,
+                                onAdd: _addToCart,
+                                onMobileAdd: _addMobileProduct,
+                                onQuantity: _updateQuantity,
+                                onEditLine: _editLine,
+                                onLineValue: _setLineValue,
+                                onRemove: _removeItem,
+                                onDiscount: (discount) => setState(() {
+                                  _discountPercent = null;
+                                  _discount = discount;
+                                }),
+                                onTenderValidity: (valid) =>
+                                    _tenderValid = valid,
+                                onDiscountValidity: (valid) =>
+                                    setState(() => _discountValid = valid),
+                                onPayment: (method) {
+                                  setState(() => _paymentMethod = method);
+                                  _restoreBarcodeFocus();
+                                },
+                                onCheckout: _checkout,
+                                onHold: _saveHeldInvoice,
+                                onHeld: _openHeldInvoices,
+                                onClear: _confirmClearCart,
+                                actions: {
+                                  'إعادة طباعة آخر فاتورة': _reprintLastReceipt,
+                                  'المزامنة': () => PosShell.open(
+                                    context,
+                                    'المزامنة والفواتير المحلية',
+                                    const SyncScreen(),
+                                  ),
+                                  'لوحة التحكم': () => PosShell.open(
+                                    context,
+                                    'لوحة التحكم',
+                                    DashboardScreen(user: widget.user),
+                                  ),
+                                  'مبيعات الجملة': () => PosShell.open(
+                                    context,
+                                    'مبيعات الجملة',
+                                    WholesaleScreen(user: widget.user),
+                                  ),
+                                  if (ApiClient.employee != null)
+                                    'شؤون الموظف': () => PosShell.open(
+                                      context,
+                                      'شؤون الموظف',
+                                      EmployeeScreen(
+                                        user: widget.user,
+                                        initialProfile: ApiClient.session ?? {},
+                                      ),
+                                    ),
+                                  'تسجيل الخروج': () =>
+                                      LogoutButton.logout(context),
+                                  'إضافة عميل': _showAddCustomerDialog,
+                                  'إضافة هدية': _giftLine,
+                                  'بحث فاتورة': () =>
+                                      _browseInvoice(search: true),
+                                  'الفاتورة السابقة': _browseInvoice,
+                                  'الفاتورة التالية': () =>
+                                      _browseInvoice(next: true),
+                                  'حذف الفاتورة': () =>
+                                      _deleteSavedInvoice(_viewedInvoice),
+                                  'التكلفة': _showCost,
+                                  'التوصيل': _editDelivery,
+                                  'خصم نسبة': _editPercentDiscount,
+                                  'تعديل الصافي': _editFinalTotal,
+                                  'نسخ': _copyInvoice,
+                                  'واتساب': _shareWhatsApp,
+                                  'PDF': _exportInvoice,
+                                  'ملاحظات': _editInvoiceNotes,
+                                  'فاتورة جديدة': _newInvoice,
+                                  'حفظ': () => _checkout(printReceipt: false),
+                                  'حفظ وطباعة': () =>
+                                      _checkout(printReceipt: true),
+                                  'مرتجعات المبيعات': _showReturnDialog,
+                                  'تسجيل مصروف': _showExpenseDialog,
+                                  'سند قبض': _showReceiptDialog,
+                                  'كشف حساب العميل': _printStatement,
+                                  'سجل الفواتير': () => PosShell.open(
+                                    context,
+                                    'سجل الفواتير',
+                                    SalesHistoryScreen(user: widget.user),
+                                  ),
+                                  if (_activeShift != null)
+                                    'إغلاق الوردية': _showCloseShiftDialog,
+                                  if (_activeShift == null)
+                                    'فتح وردية': () =>
+                                        _showOpenShiftDialog(_branchId),
+                                  'تحديث الأصناف': _loadData,
+                                },
                               ),
-                            'تسجيل الخروج': () => LogoutButton.logout(context),
-                            'إضافة عميل': _showAddCustomerDialog,
-                            'إضافة هدية': _giftLine,
-                            'بحث فاتورة': () => _browseInvoice(search: true),
-                            'الفاتورة السابقة': _browseInvoice,
-                            'الفاتورة التالية': () =>
-                                _browseInvoice(next: true),
-                            'حذف الفاتورة': () =>
-                                _deleteSavedInvoice(_viewedInvoice),
-                            'التكلفة': _showCost,
-                            'التوصيل': _editDelivery,
-                            'خصم نسبة': _editPercentDiscount,
-                            'تعديل الصافي': _editFinalTotal,
-                            'نسخ': _copyInvoice,
-                            'واتساب': _shareWhatsApp,
-                            'PDF': _exportInvoice,
-                            'ملاحظات': _editInvoiceNotes,
-                            'فاتورة جديدة': _newInvoice,
-                            'حفظ': () => _checkout(printReceipt: false),
-                            'حفظ وطباعة': () => _checkout(printReceipt: true),
-                            'مرتجعات المبيعات': _showReturnDialog,
-                            'تسجيل مصروف': _showExpenseDialog,
-                            'سند قبض': _showReceiptDialog,
-                            'كشف حساب العميل': _printStatement,
-                            'سجل الفواتير': () => PosShell.open(
-                              context,
-                              'سجل الفواتير',
-                              SalesHistoryScreen(user: widget.user),
                             ),
-                            if (_activeShift != null)
-                              'إغلاق الوردية': _showCloseShiftDialog,
-                            if (_activeShift == null)
-                              'فتح وردية': () =>
-                                  _showOpenShiftDialog(_branchId),
-                            'تحديث الأصناف': _loadData,
-                          },
+                          ],
                         ),
                       ),
               ),
