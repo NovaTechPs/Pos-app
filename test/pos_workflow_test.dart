@@ -630,6 +630,34 @@ void main() {
     },
   );
 
+  testWidgets(
+    'a quick second tap on a product does not add its quantity twice',
+    (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      mockServer();
+      await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
+      await tester.pumpAndSettle();
+      final product = find.byKey(const ValueKey('pos-product-0'));
+      await tester.tap(product);
+      await tester.tap(product, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('add-product-quantity')), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('add-product-quantity')),
+        '6',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('حفظ'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('add-product-quantity')), findsNothing);
+      final cart = tester.widget<PosWorkspace>(find.byType(PosWorkspace)).cart;
+      expect(cart.single['quantity'], 6);
+    },
+  );
+
   testWidgets('phones and narrow windows have no sidebar', (tester) async {
     tester.view.physicalSize = const Size(800, 900);
     tester.view.devicePixelRatio = 1;

@@ -373,7 +373,9 @@ void main() {
       expect(submitted?['amount'], 25);
       expect(submitted?['payment_method'], 'cash');
       expect(submittedPath, endsWith('/wholesale/receipts'));
-      expect(find.text('الرصيد بعد القبض: 75.00'), findsOneWidget);
+      // After saving, the screen is ready for a new receipt; the saved one opens from «آخر سند».
+      expect(find.text('الرصيد بعد القبض: 75.00'), findsNothing);
+      expect(tester.widget<TextField>(amount).controller!.text, isEmpty);
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(find.text('1 أصناف'), findsOneWidget);
@@ -690,7 +692,9 @@ void main() {
       expect(submitted?['amount'], 25);
       expect(submitted?['payment_method'], 'cash');
       expect(submittedPath, endsWith('/wholesale/receipts'));
-      expect(find.text('الرصيد بعد القبض: 75.00'), findsOneWidget);
+      // After saving, the screen is ready for a new receipt; the saved one opens from «آخر سند».
+      expect(find.text('الرصيد بعد القبض: 75.00'), findsNothing);
+      expect(tester.widget<TextField>(amount).controller!.text, isEmpty);
       expect(submitted?['customer_id'], 1);
       expect(submitted?['operation_uuid'], isNotEmpty);
       expect(find.text('RCP-7'), findsNothing);

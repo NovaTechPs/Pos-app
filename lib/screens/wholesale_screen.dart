@@ -50,6 +50,10 @@ class _WholesaleScreenState extends State<WholesaleScreen>
   int? _customerId, _previousId, _nextId;
   Map<String, dynamic>? _invoice, _lastSaved, _record;
   bool _loading = true, _saving = false, _editing = false, _whatsapp = false;
+
+  /// A slow device can take a second tap before the quantity window opens;
+  /// that tap must not open a second window and add the item twice.
+  bool _addDialogOpen = false;
   String? _error;
   String _search = '', _paymentMethod = 'cash', _discountType = 'fixed';
   int _page = 0;
@@ -293,7 +297,16 @@ class _WholesaleScreenState extends State<WholesaleScreen>
   }
 
   Future<void> _addMobileProduct(Map<String, dynamic> product) async {
-    if (_locked) return;
+    if (_locked || _addDialogOpen) return;
+    _addDialogOpen = true;
+    try {
+      await _addMobileProductOnce(product);
+    } finally {
+      _addDialogOpen = false;
+    }
+  }
+
+  Future<void> _addMobileProductOnce(Map<String, dynamic> product) async {
     final customerId = _customerId;
     final existing = _cart.where((r) => r['id'] == product['id']).firstOrNull;
     final selection = await showDialog<ProductSelection>(

@@ -331,6 +331,13 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
           return;
         }
         if (print) await _print();
+        // The screen is ready for the next receipt; the saved one stays in the archive.
+        final number = _voucher?['voucher_number'];
+        if (mounted) {
+          setState(() => _busy = false);
+          _new();
+          _message('تم حفظ سند القبض ${number ?? ''}؛ جاهز لسند جديد.');
+        }
       } else {
         _message(result['message'] ?? 'تعذر حفظ السند');
       }

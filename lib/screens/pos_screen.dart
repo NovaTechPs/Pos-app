@@ -62,6 +62,9 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   int? _loadRetrySeconds;
   bool _isRepricing = false;
   bool _missingBarcodeOpen = false;
+
+  /// A second tap while the quantity window is opening must not add the item twice.
+  bool _addDialogOpen = false;
   bool _holdPromptOpen = false;
 
   /// The line the cashier just added (new or merged); the invoice table
@@ -1584,7 +1587,16 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
 
   Future<void> _addMobileProduct(Map<String, dynamic> product) async {
     if (_refuseWhileViewing()) return;
-    if (_isCheckingOut || _isRepricing) return;
+    if (_isCheckingOut || _isRepricing || _addDialogOpen) return;
+    _addDialogOpen = true;
+    try {
+      await _addMobileProductOnce(product);
+    } finally {
+      _addDialogOpen = false;
+    }
+  }
+
+  Future<void> _addMobileProductOnce(Map<String, dynamic> product) async {
     final price = _productPrice(product);
     if (price == null) {
       _showMessage('لا يوجد سعر معتمد لهذا الصنف', isError: true);
