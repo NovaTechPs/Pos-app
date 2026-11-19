@@ -255,7 +255,7 @@ class _CustomerSearchEntry {
   final List<String> numericValues;
 
   bool matches(String query, String digitQuery) =>
-      (query.isNotEmpty && searchText.contains(query)) ||
+      (query.isNotEmpty && ProductCatalog.matchesWords(searchText, query)) ||
       (digitQuery.isNotEmpty &&
           numericValues.any((value) => value.contains(digitQuery)));
 

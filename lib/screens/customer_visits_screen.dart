@@ -479,9 +479,12 @@ class _CustomerChecklistState extends State<_CustomerChecklist> {
         ? widget.customers
         : widget.customers
               .where(
-                (customer) => ProductCatalog.normalizeSearch(
-                  '${customer['name']} ${customer['code'] ?? ''} ${customer['phone'] ?? ''}',
-                ).contains(query),
+                (customer) => ProductCatalog.matchesWords(
+                  ProductCatalog.normalizeSearch(
+                    '${customer['name']} ${customer['code'] ?? ''} ${customer['phone'] ?? ''}',
+                  ),
+                  query,
+                ),
               )
               .toList(growable: false);
     return AlertDialog(

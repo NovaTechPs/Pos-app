@@ -72,6 +72,13 @@ class ProductCatalog {
               .toList(growable: false);
   }
 
+  /// True when every word of an already normalized [query] appears in [text], in any order,
+  /// the same way the product search matches (\u00AB\u0628\u064A\u0628\u0633\u064A \u0644\u062A\u0631\u00BB finds \u00AB\u0644\u062A\u0631 \u0628\u064A\u0628\u0633\u064A\u00BB).
+  static bool matchesWords(String text, String query) {
+    if (query.isEmpty) return true;
+    return query.split(' ').every(text.contains);
+  }
+
   static final _marks = RegExp(r'[\u064B-\u065F\u0670\u0640]');
   static final _alef = RegExp('[أإآٱ]');
   static final _spaces = RegExp(r'\s+');

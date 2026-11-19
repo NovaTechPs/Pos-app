@@ -120,4 +120,38 @@ void main() {
     expect(find.text('النتائج: 1 من 1'), findsOneWidget);
     expect(find.text('ستوب ستوك / كفر عقب'), findsOneWidget);
   });
+  testWidgets(
+    'customer search matches words in any order like the product search',
+    (tester) async {
+      int? selected;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomerPicker(
+              customers: const [
+                {'id': 1, 'name': 'محمد أحمد علي'},
+                {'id': 2, 'name': 'أحمد سالم'},
+                {'id': 3, 'name': 'سوبرماركت النور'},
+              ],
+              value: null,
+              onChanged: (value) => selected = value,
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('عميل نقدي'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'علي محمد');
+      await tester.pumpAndSettle();
+      expect(find.text('محمد أحمد علي'), findsWidgets);
+      expect(find.text('أحمد سالم'), findsNothing);
+      await tester.enterText(find.byType(TextField), 'احمد');
+      await tester.pumpAndSettle();
+      expect(find.text('أحمد سالم'), findsOneWidget);
+      expect(find.text('سوبرماركت النور'), findsNothing);
+      await tester.tap(find.text('أحمد سالم'));
+      await tester.pumpAndSettle();
+      expect(selected, 2);
+    },
+  );
 }
