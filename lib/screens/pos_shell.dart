@@ -121,6 +121,8 @@ class _PosShellState extends State<PosShell> {
           'سند قبض مستقل': WholesaleReceiptScreen(user: widget.user),
           'قائمة الزيارات': CustomerVisitsScreen(user: widget.user),
           'سجل الفواتير': SalesHistoryScreen(user: widget.user),
+          // Phones pick their Bluetooth printer here; without it nothing can print.
+          'إعدادات الطابعات': const PrinterSettingsScreen(),
         }
       : {
           'نقطة البيع': PosScreen(user: widget.user),

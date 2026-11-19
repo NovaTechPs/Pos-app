@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:waslapos_app/screens/wholesale_screen.dart';
+import 'package:waslapos_app/screens/printer_settings_screen.dart';
 import 'package:waslapos_app/screens/pos_shell.dart';
 import 'package:waslapos_app/screens/pos_screen.dart';
 import 'package:waslapos_app/screens/sales_history_screen.dart';
@@ -235,6 +236,21 @@ void main() {
       await tester.pumpAndSettle();
     }, variant: TargetPlatformVariant({platform}));
   }
+
+  testWidgets('Android offers the printer settings among its departments', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: PosShell(user: user)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('فتح قسم'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('إعدادات الطابعات').last);
+    // The settings screen keeps looking for Bluetooth printers, so it never settles.
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(PrinterSettingsScreen), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 500));
+  });
 
   testWidgets('Android starts wholesale and supplier can be selected by code', (
     tester,
