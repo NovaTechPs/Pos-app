@@ -10,6 +10,7 @@ import '../services/wholesale_service.dart';
 import '../services/printer_service.dart';
 import '../models/sale_data.dart';
 import '../models/payment_summary.dart';
+import '../widgets/busy_button_content.dart';
 import '../widgets/payment_confirmation.dart';
 import '../widgets/customer_picker.dart';
 import '../widgets/operation_review.dart';
@@ -39,6 +40,9 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
   String _method = 'cash';
   DateTime _date = DateTime.now();
   bool _busy = true, _editing = false;
+
+  /// The button whose action is running, shown as «جاري ...».
+  String? _busyAction;
   int get branch => SaleData.id(widget.user['branch_id']) ?? 0;
   bool get _readOnly => _voucher != null && !_editing;
   bool get _locked =>
@@ -164,14 +168,20 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
         false;
   }
 
-  Future<void> _load([Map<String, Object> query = const {}]) async {
+  Future<void> _load([
+    Map<String, Object> query = const {},
+    String action = 'last',
+  ]) async {
     if (_busy ||
         CheckoutService.needsReview(_record) ||
         !await _discard() ||
         !mounted) {
       return;
     }
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _busyAction = action;
+    });
     try {
       final result = await _service.document(
         branch,
@@ -226,7 +236,7 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 250));
     c.dispose();
     if (mounted && value != null && value.trim().isNotEmpty) {
-      await _load({'search': value.trim()});
+      await _load({'search': value.trim()}, 'search');
     }
   }
 
@@ -279,6 +289,7 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
 
   Future<void> _save({bool print = false}) async {
     if (_locked) return;
+    _busyAction = print ? 'save-print' : 'save';
     final amount = SaleData.number(_amount.text);
     if (_customerId == null ||
         amount == null ||
@@ -396,11 +407,19 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
                         ),
                         OutlinedButton(
                           onPressed: _busy ? null : () => _load(),
-                          child: const Text('آخر سند'),
+                          child: BusyButtonContent(
+                            busy: _busy && _busyAction == 'last',
+                            label: 'آخر سند',
+                            busyLabel: 'جاري التحميل…',
+                          ),
                         ),
                         OutlinedButton(
                           onPressed: _busy ? null : _search,
-                          child: const Text('بحث'),
+                          child: BusyButtonContent(
+                            busy: _busy && _busyAction == 'search',
+                            label: 'بحث',
+                            busyLabel: 'جاري البحث…',
+                          ),
                         ),
                         if (_voucher != null) ...[
                           TextButton(
@@ -527,12 +546,22 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
                       runSpacing: 8,
                       children: [
                         FilledButton(
+                          key: const Key('receipt-save-print'),
                           onPressed: _locked ? null : () => _save(print: true),
-                          child: const Text('حفظ وطباعة'),
+                          child: BusyButtonContent(
+                            busy: _busy && _busyAction == 'save-print',
+                            label: 'حفظ وطباعة',
+                            busyLabel: 'جاري الحفظ…',
+                          ),
                         ),
                         OutlinedButton(
+                          key: const Key('receipt-save'),
                           onPressed: _locked ? null : () => _save(),
-                          child: const Text('حفظ'),
+                          child: BusyButtonContent(
+                            busy: _busy && _busyAction == 'save',
+                            label: 'حفظ',
+                            busyLabel: 'جاري الحفظ…',
+                          ),
                         ),
                         if (_voucher != null && !_editing) ...[
                           OutlinedButton(

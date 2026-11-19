@@ -1,3 +1,4 @@
+import '../widgets/busy_button_content.dart';
 import '../widgets/product_add_dialog.dart';
 
 import 'dart:async';
@@ -54,6 +55,9 @@ class _WholesaleScreenState extends State<WholesaleScreen>
   /// A slow device can take a second tap before the quantity window opens;
   /// that tap must not open a second window and add the item twice.
   bool _addDialogOpen = false;
+
+  /// Which save button is running, so only that one shows «جاري الحفظ…».
+  bool _savingWithPrint = false;
   String? _error;
   String _search = '', _paymentMethod = 'cash', _discountType = 'fixed';
   int _page = 0;
@@ -656,6 +660,7 @@ class _WholesaleScreenState extends State<WholesaleScreen>
   }
 
   Future<void> _save({bool print = false}) async {
+    _savingWithPrint = print;
     if (_locked || _cart.isEmpty) return;
     if (_invalidLines.isNotEmpty) {
       _message('صحّح السعر أو الكمية في السلة قبل الحفظ');
@@ -1635,17 +1640,27 @@ class _WholesaleScreenState extends State<WholesaleScreen>
         spacing: 8,
         runSpacing: 8,
         children: [
-          FilledButton.icon(
+          FilledButton(
+            key: const Key('wholesale-save-print'),
             onPressed: _locked || _cart.isEmpty
                 ? null
                 : () => _save(print: true),
-            icon: const Icon(Icons.print),
-            label: const Text('حفظ وطباعة'),
+            child: BusyButtonContent(
+              busy: _saving && _savingWithPrint,
+              icon: Icons.print,
+              label: 'حفظ وطباعة',
+              busyLabel: 'جاري الحفظ…',
+            ),
           ),
-          OutlinedButton.icon(
+          OutlinedButton(
+            key: const Key('wholesale-save'),
             onPressed: _locked || _cart.isEmpty ? null : () => _save(),
-            icon: const Icon(Icons.save),
-            label: const Text('حفظ الفاتورة'),
+            child: BusyButtonContent(
+              busy: _saving && !_savingWithPrint,
+              icon: Icons.save,
+              label: 'حفظ الفاتورة',
+              busyLabel: 'جاري الحفظ…',
+            ),
           ),
         ],
       ),
