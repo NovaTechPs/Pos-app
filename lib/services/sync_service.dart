@@ -93,6 +93,7 @@ class SyncService {
           continue;
         }
         final uuid = record['payload']['operation_uuid'];
+        final resultKey = '${record['result_key'] ?? 'order'}';
         if (record['status'] != 'queued') {
           final check = await ApiClient.get(
             Uri.parse('${ApiConfig.baseUrl}/sale-operations/$uuid'),
@@ -101,11 +102,11 @@ class SyncService {
             contactedServer = true;
             final data = jsonDecode(check.body);
             if (data['status'] == 'confirmed' &&
-                data['result']?['order'] is Map) {
+                data['result']?[resultKey] is Map) {
               await store.saveOperation({
                 ...record,
                 'status': 'confirmed',
-                'order': data['result']['order'],
+                'order': data['result'][resultKey],
                 'message': null,
               });
               continue;
@@ -118,22 +119,25 @@ class SyncService {
           continue;
         }
         final shiftId = record['offline_shift_id'];
-        if (shiftId == null) {
+        if (shiftId == null && record['requires_shift'] != false) {
           throw StateError('عملية محلية بلا وردية معتمدة؛ تحتاج مراجعة.');
         }
-        final shift = await ApiClient.get(
-          Uri.parse(
-            '${ApiConfig.baseUrl}/shifts/active?branch_id=${record['payload']['branch_id']}',
-          ),
-        );
-        if (shift.statusCode != 200) {
-          throw StateError('تعذر التحقق من الوردية قبل المزامنة.');
-        }
-        contactedServer = true;
-        if ('${jsonDecode(shift.body)['active_shift']?['id']}' != '$shiftId') {
-          throw StateError(
-            'الوردية الأصلية مغلقة أو تغيرت؛ راجع الفواتير المحلية قبل المزامنة.',
+        if (shiftId != null) {
+          final shift = await ApiClient.get(
+            Uri.parse(
+              '${ApiConfig.baseUrl}/shifts/active?branch_id=${record['payload']['branch_id']}',
+            ),
           );
+          if (shift.statusCode != 200) {
+            throw StateError('تعذر التحقق من الوردية قبل المزامنة.');
+          }
+          contactedServer = true;
+          if ('${jsonDecode(shift.body)['active_shift']?['id']}' !=
+              '$shiftId') {
+            throw StateError(
+              'الوردية الأصلية مغلقة أو تغيرت؛ راجع الفواتير المحلية قبل المزامنة.',
+            );
+          }
         }
         if (ApiClient.token != token || ApiClient.sessionExpired.value) break;
         record = {...record, 'status': 'sending'};
@@ -150,12 +154,12 @@ class SyncService {
         }
         if ((response.statusCode == 200 || response.statusCode == 201) &&
             data is Map &&
-            data['order'] is Map &&
-            data['order']['id'] != null) {
+            data[resultKey] is Map &&
+            data[resultKey]['id'] != null) {
           await store.saveOperation({
             ...record,
             'status': 'confirmed',
-            'order': data['order'],
+            'order': data[resultKey],
             'message': null,
           });
         } else {
@@ -241,23 +245,44 @@ class SyncService {
     }
   }
 
+  /// Invoice total from its lines when the payload does not carry one; a receipt uses its amount.
+  static Object? _localTotal(Map payload) {
+    final items = payload['items'];
+    if (items is! List) return payload['amount'];
+    var total = 0.0;
+    for (final item in items) {
+      if (item is Map) {
+        total +=
+            (num.tryParse('${item['quantity']}') ?? 0) *
+            (num.tryParse('${item['price']}') ?? 0);
+      }
+    }
+    total -= num.tryParse('${payload['discount_amount'] ?? 0}') ?? 0;
+    return double.parse(total.toStringAsFixed(2));
+  }
+
   static Future<Map<String, dynamic>> enqueue({
     required OfflineStore store,
     required Map<String, dynamic> record,
     required String endpoint,
-    required Object shiftId,
+    required Object? shiftId,
+    String resultKey = 'order',
+    bool requiresShift = true,
   }) async {
     final uuid = record['payload']['operation_uuid'] as String;
     final payload = record['payload'] as Map;
+    final number = await store.nextOfflineInvoiceNumber();
+    final total = payload['total_amount'] ?? _localTotal(payload);
     final order = <String, dynamic>{
       ...payload,
       'id': 'local:$uuid',
-      'invoice_number': await store.nextOfflineInvoiceNumber(),
+      'invoice_number': number,
+      if (resultKey == 'voucher') 'voucher_number': number,
       'created_at': record['created_at'],
       'status': 'queued',
       'offline_pending': true,
-      'total': payload['total_amount'],
-      'paid_amount': payload['total_amount'],
+      'total': total,
+      'paid_amount': payload['paid_amount'] ?? total,
     };
     final queued = {
       ...record,
@@ -265,6 +290,8 @@ class SyncService {
       'order': order,
       'endpoint': endpoint,
       'offline_shift_id': shiftId,
+      'result_key': resultKey,
+      'requires_shift': requiresShift,
     };
     await store.saveOperation(queued);
     revision.value++;

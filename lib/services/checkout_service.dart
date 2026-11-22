@@ -22,6 +22,7 @@ class CheckoutService {
     this.storage = const FlutterSecureStorage(),
     this.resultKey = 'order',
     this.offlineEndpoint,
+    this.requireOfflineShift = true,
     CheckoutSender? send,
     this.lookup,
   }) : _key = 'wasla_checkout_${Uri.encodeComponent(scope)}',
@@ -30,6 +31,10 @@ class CheckoutService {
   final String _key;
   final String resultKey;
   final String? offlineEndpoint;
+
+  /// POS sales stay tied to the shift they were sold in; sales invoices and
+  /// receipts are attached to whichever shift is open when they reach the server.
+  final bool requireOfflineShift;
   final FlutterSecureStorage storage;
   final CheckoutSender _send;
   final Future<http.Response> Function(String uuid)? lookup;
@@ -235,6 +240,13 @@ class CheckoutService {
         }
       }
       final useOffline = offlineEndpoint != null && ApiClient.offline.value;
+      if (useOffline &&
+          (payload['invoice_id'] != null || payload['receipt_id'] != null)) {
+        return {
+          'success': false,
+          'message': 'تعديل مستند محفوظ يحتاج اتصالًا بالإنترنت. يمكنك حفظ مستند جديد دون إنترنت.',
+        };
+      }
       if (ApiClient.offline.value && offlineEndpoint == null) {
         return {
           'success': false,
@@ -252,7 +264,8 @@ class CheckoutService {
               ...payload,
               'operation_uuid': OperationId.create(),
               'held_order_id': ?heldOrderId,
-              if (useOffline) 'offline_shift_id': offlineShiftId,
+              if (useOffline && offlineShiftId != null)
+                'offline_shift_id': offlineShiftId,
             },
             'items': receiptItems,
             'cashier_name': cashierName,
@@ -271,7 +284,7 @@ class CheckoutService {
       if (useOffline) {
         final store = ApiClient.offlineStore;
         if (store == null ||
-            offlineShiftId == null ||
+            (requireOfflineShift && offlineShiftId == null) ||
             ApiClient.sessionExpired.value) {
           await _write({...record, 'status': 'rejected'});
           return {
@@ -284,6 +297,8 @@ class CheckoutService {
           record: record,
           endpoint: offlineEndpoint!,
           shiftId: offlineShiftId,
+          resultKey: resultKey,
+          requiresShift: requireOfflineShift,
         );
         try {
           await _write(queued);

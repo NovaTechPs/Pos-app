@@ -73,6 +73,8 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
         'wholesale-receipt',
       ].join('|'),
       resultKey: 'voucher',
+      offlineEndpoint: 'wholesale/receipts',
+      requireOfflineShift: false,
       send: (payload) => ApiClient.post(
         Uri.parse('${ApiConfig.baseUrl}/wholesale/receipts'),
         body: payload,
@@ -347,7 +349,11 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
           }
           _editing = false;
         });
-        _message('تم حفظ سند القبض');
+        _message(
+          result['queued'] == true
+              ? 'حُفظ سند القبض على الجهاز دون إنترنت، وسيُرسل تلقائيًا عند عودة الاتصال.'
+              : 'تم حفظ سند القبض',
+        );
         if (!PaymentSummary.matches(_voucher!['amount'], amount)) {
           setState(() => _busy = false);
           await showPaymentMismatch(context, amount, _voucher!['amount']);
@@ -359,7 +365,11 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
         if (mounted) {
           setState(() => _busy = false);
           _new();
-          _message('تم حفظ سند القبض ${number ?? ''}؛ جاهز لسند جديد.');
+          _message(
+            result['queued'] == true
+                ? 'حُفظ سند القبض ${number ?? ''} على الجهاز وسيُرسل عند عودة الاتصال؛ جاهز لسند جديد.'
+                : 'تم حفظ سند القبض ${number ?? ''}؛ جاهز لسند جديد.',
+          );
         }
       } else {
         _message(result['message'] ?? 'تعذر حفظ السند');

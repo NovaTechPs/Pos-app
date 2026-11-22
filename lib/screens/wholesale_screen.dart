@@ -119,6 +119,9 @@ class _WholesaleScreenState extends State<WholesaleScreen>
     _drafts = OfflineStore('$scope-draft');
     _checkout = CheckoutService(
       scope: scope,
+      // Online saves go straight to the server; offline ones wait on the device.
+      offlineEndpoint: widget.salesInvoice ? 'pos/orders' : 'wholesale/orders',
+      requireOfflineShift: false,
       send: (payload) => ApiClient.post(
         Uri.parse(
           '${ApiConfig.baseUrl}/${widget.salesInvoice ? 'pos' : 'wholesale'}/orders',
@@ -755,7 +758,9 @@ class _WholesaleScreenState extends State<WholesaleScreen>
         _lastSaved = order;
         _reset();
         _message(
-          'تم حفظ ${widget.salesInvoice ? 'فاتورة المبيعات' : 'فاتورة الجملة'} ${order['invoice_number']}',
+          result['queued'] == true
+              ? 'حُفظت ${widget.salesInvoice ? 'فاتورة المبيعات' : 'فاتورة الجملة'} ${order['invoice_number']} على الجهاز دون إنترنت، وستُرسل تلقائيًا عند عودة الاتصال.'
+              : 'تم حفظ ${widget.salesInvoice ? 'فاتورة المبيعات' : 'فاتورة الجملة'} ${order['invoice_number']}',
         );
         unawaited(_loadData(background: true));
         final collected = order['collected_amount'] ?? order['paid_amount'];

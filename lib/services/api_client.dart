@@ -22,6 +22,9 @@ class ApiClient {
   static http.Client client = http.Client();
   static final offline = ValueNotifier<bool>(false);
   static final cachedAt = ValueNotifier<String?>(null);
+
+  /// How long a screen with a saved copy waits for the server before using it.
+  static Duration savedCopyWait = const Duration(seconds: 6);
   static Stopwatch? _connectionAge;
   static String? _connectionToken, _connectionBranch;
 
@@ -139,6 +142,7 @@ class ApiClient {
     bool cacheForOffline = false,
     bool preferCache = false,
     Duration? timeout,
+    Duration? savedCopyTimeout,
   }) async {
     final requestToken = token;
     final store = cacheForOffline ? offlineStore : null;
@@ -147,8 +151,12 @@ class ApiClient {
     // exists (choosing the timeout) without loading a whole catalog.
     final saved = usable && preferCache ? await store.cached(uri) : null;
     final hasSaved = saved != null || (usable && await store.hasCached(uri));
+    // A network that answers nothing (Wi-Fi without internet) falls back to
+    // the saved copy after savedCopyTimeout instead of the full wait.
     final readTimeout =
-        timeout ?? Duration(seconds: cacheForOffline && !hasSaved ? 60 : 20);
+        timeout ??
+        (hasSaved ? savedCopyTimeout : null) ??
+        Duration(seconds: cacheForOffline && !hasSaved ? 60 : 20);
     if (preferCache && usable) {
       final snapshot = saved;
       if (snapshot != null) {

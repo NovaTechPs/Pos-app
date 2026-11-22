@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../services/api_client.dart';
+import '../services/automatic_sync.dart';
 import '../widgets/logout_button.dart';
 import '../widgets/sync_status_button.dart';
 import '../widgets/desktop_pos_viewport.dart';
@@ -69,6 +70,23 @@ class _PosShellState extends State<PosShell> {
     if (!_isAndroid) _Department('نقطة البيع', PosScreen(user: widget.user)),
   ];
   int _selected = 0;
+
+  /// Android has no POS screen to send offline documents, so the shell does.
+  AutomaticSync? _automaticSync;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isAndroid) {
+      _automaticSync = AutomaticSync()..start();
+    }
+  }
+
+  @override
+  void dispose() {
+    _automaticSync?.dispose();
+    super.dispose();
+  }
 
   void open(String title, Widget screen) {
     FocusManager.instance.primaryFocus?.unfocus();

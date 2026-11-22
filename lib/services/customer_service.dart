@@ -37,7 +37,12 @@ class CustomerService {
           !visited.add(next.toString())) {
         throw const ApiException('تعذر تحميل بقية الزبائن والموردين.');
       }
-      final response = await ApiClient.get(next, cacheForOffline: true);
+      final response = await ApiClient.get(
+        next,
+        cacheForOffline: true,
+        preferCache: ApiClient.offline.value,
+        savedCopyTimeout: ApiClient.savedCopyWait,
+      );
       final data = await ApiException.decodeAsync(response);
       lastFetchOffline |= response.headers['x-wasla-offline'] == 'true';
       final payload = data['parties'];

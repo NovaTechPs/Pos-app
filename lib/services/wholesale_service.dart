@@ -60,8 +60,13 @@ class WholesaleService {
   }
 
   Future<List<dynamic>> fetchProducts(int branchId) async {
+    // Kept on the device so the sales screen and its filters work offline.
     final response = await ApiClient.get(
       Uri.parse('$baseUrl/wholesale/products?branch_id=$branchId'),
+      cacheForOffline: true,
+      // Already known offline: open from the saved copy without waiting.
+      preferCache: ApiClient.offline.value,
+      savedCopyTimeout: ApiClient.savedCopyWait,
     );
     final data = await ApiException.decodeAsync(response);
     allowNegativeStock = data['allow_negative_stock'] == true;
