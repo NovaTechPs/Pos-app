@@ -88,22 +88,55 @@ void main() {
     },
   );
 
-  test(
-    'missing printer gives settings error without opening print dialog',
-    () async {
-      final service = PrinterRoutingService(androidBluetooth: true);
-      await expectLater(
-        service.printPdf(
-          role: PrintRole.receipt,
-          bytes: Uint8List(0),
-          format: PdfPageFormat.roll57,
-          name: 'receipt',
-        ),
-        throwsStateError,
-      );
-      expect(calls, isEmpty);
-    },
-  );
+  test('without a chosen printer the first print uses the paired printer and remembers it', () async {
+    final service = PrinterRoutingService(androidBluetooth: true);
+    await service.printPdf(
+      role: PrintRole.receipt,
+      bytes: Uint8List.fromList([1]),
+      format: PdfPageFormat.roll57,
+      name: 'receipt',
+    );
+    expect(calls.last.method, 'printPdf');
+    expect(calls.last.arguments['address'], 'AA:BB:CC:DD:EE:FF');
+    expect(
+      (await service.selected(PrintRole.receipt))!.url,
+      'bluetooth:AA:BB:CC:DD:EE:FF',
+    );
+  });
+
+  test('among several paired devices the one named like a printer is used, otherwise nothing prints', () async {
+    var paired = [
+      {'name': 'Galaxy Buds', 'address': '11:11:11:11:11:11'},
+      {'name': 'MPT-II', 'address': '22:22:22:22:22:22'},
+    ];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(BluetoothPrinterService.channel, (
+          call,
+        ) async {
+          calls.add(call);
+          if (call.method == 'builtInAvailable') return false;
+          if (call.method == 'pairedDevices') return paired;
+          return null;
+        });
+    final service = PrinterRoutingService(androidBluetooth: true);
+    Future<void> print() => service.printPdf(
+      role: PrintRole.receipt,
+      bytes: Uint8List(1),
+      format: PdfPageFormat.roll57,
+      name: 'receipt',
+    );
+    await print();
+    expect(calls.last.arguments['address'], '22:22:22:22:22:22');
+
+    await service.select(PrintRole.receipt, null);
+    paired = [
+      {'name': 'Galaxy Buds', 'address': '11:11:11:11:11:11'},
+      {'name': 'Car Audio', 'address': '33:33:33:33:33:33'},
+    ];
+    calls.clear();
+    await expectLater(print(), throwsStateError);
+    expect(calls.map((call) => call.method), isNot(contains('printPdf')));
+  });
 
   test(
     'connection failure propagates once without retry or system fallback',

@@ -134,9 +134,8 @@ class _PosShellState extends State<PosShell> {
             user: widget.user,
             salesInvoice: true,
           ),
+          // Phones pick their paired Bluetooth printer on the first print.
           'سند قبض مستقل': WholesaleReceiptScreen(user: widget.user),
-          // Phones pick their Bluetooth printer here; without it nothing can print.
-          'إعدادات الطابعات': const PrinterSettingsScreen(),
         }
       : {
           'نقطة البيع': PosScreen(user: widget.user),

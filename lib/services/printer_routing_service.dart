@@ -135,6 +135,32 @@ class PrinterRoutingService {
     _printersFuture = null;
   }
 
+  static final _printerName = RegExp(
+    r'print|pos|^pt|mpt|rpp|xp-|طابع',
+    caseSensitive: false,
+  );
+
+  /// Phones have no printer settings screen: the first print uses the built-in
+  /// printer, or the only paired device, or the only paired device named like a printer.
+  Future<Printer> _pairedPrinter() async {
+    final devices = await bluetooth.printers();
+    final builtIn = devices.where(
+      (printer) =>
+          printer.url == '${BluetoothPrinterService.prefix}internal-q6',
+    );
+    if (builtIn.isNotEmpty) return builtIn.first;
+    if (devices.length == 1) return devices.single;
+    final printers = devices.where(
+      (printer) => _printerName.hasMatch(printer.name),
+    );
+    if (printers.length == 1) return printers.single;
+    throw StateError(
+      devices.isEmpty
+          ? 'لا توجد طابعة بلوتوث مقترنة. اقترن بالطابعة من إعدادات بلوتوث الجوال ثم أعد الطباعة.'
+          : 'تعذر تحديد الطابعة بين الأجهزة المقترنة. أبقِ طابعة واحدة مقترنة في إعدادات بلوتوث الجوال ثم أعد الطباعة.',
+    );
+  }
+
   static Future<bool> _direct(
     Printer printer,
     Uint8List bytes,
@@ -157,12 +183,11 @@ class PrinterRoutingService {
     required String name,
   }) async {
     if (androidBluetooth) {
-      final saved = await selected(role);
+      var saved = await selected(role);
       if (saved == null ||
           !saved.url.startsWith(BluetoothPrinterService.prefix)) {
-        throw StateError(
-          'اختر طابعة بلوتوث ${role.label} من إعدادات الطابعات أولاً.',
-        );
+        saved = await _pairedPrinter();
+        await select(role, saved);
       }
       await bluetooth.printPdf(saved, bytes, await paperWidth(role));
       return;

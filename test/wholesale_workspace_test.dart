@@ -226,8 +226,8 @@ void main() {
       expect(find.byType(WholesaleScreen), findsNothing);
       await tester.tap(find.text('فتح قسم'));
       await tester.pumpAndSettle();
-      expect(find.byType(PopupMenuItem<String>), findsNWidgets(3));
-      expect(find.text('إعدادات الطابعات'), findsWidgets);
+      expect(find.byType(PopupMenuItem<String>), findsNWidgets(2));
+      expect(find.text('إعدادات الطابعات'), findsNothing);
       expect(find.text('قائمة الزيارات'), findsNothing);
       expect(find.text('سجل الفواتير'), findsNothing);
       await tester.tap(find.text('فاتورة مبيعات').last);
@@ -264,17 +264,18 @@ void main() {
     }, variant: TargetPlatformVariant({platform}));
   }
 
-  testWidgets('Android offers the printer settings among its departments', (
+  testWidgets('Android keeps the printer settings out of its departments', (
     tester,
   ) async {
     await tester.pumpWidget(const MaterialApp(home: PosShell(user: user)));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('إعدادات الطابعات').first);
-    // The settings screen keeps looking for Bluetooth printers, so it never settles.
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.byType(PrinterSettingsScreen), findsOneWidget);
+    expect(find.text('إعدادات الطابعات'), findsNothing);
+    await tester.tap(find.text('فتح قسم'));
+    await tester.pumpAndSettle();
+    expect(find.text('إعدادات الطابعات'), findsNothing);
+    expect(find.byType(PrinterSettingsScreen), findsNothing);
     await tester.pumpWidget(const SizedBox());
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('Android starts wholesale and supplier can be selected by code', (
