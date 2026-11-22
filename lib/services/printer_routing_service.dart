@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
@@ -189,7 +190,18 @@ class PrinterRoutingService {
         saved = await _pairedPrinter();
         await select(role, saved);
       }
-      await bluetooth.printPdf(saved, bytes, await paperWidth(role));
+      final width = await paperWidth(role);
+      try {
+        await bluetooth.printPdf(saved, bytes, width);
+      } on PlatformException catch (error) {
+        // The remembered printer was unpaired: nothing printed, so use the
+        // printer paired now. A paired printer that fails is never retried.
+        if (!(error.message ?? '').contains('غير مقترنة')) rethrow;
+        final replacement = await _pairedPrinter();
+        if (replacement.url == saved.url) rethrow;
+        await select(role, replacement);
+        await bluetooth.printPdf(replacement, bytes, width);
+      }
       return;
     }
     final info = await _printingInfo();

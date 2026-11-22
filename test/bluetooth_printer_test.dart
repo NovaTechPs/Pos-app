@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
+import 'package:printing/printing.dart';
 import 'package:waslapos_app/services/bluetooth_printer_service.dart';
 import 'package:waslapos_app/services/printer_routing_service.dart';
 import 'package:waslapos_app/screens/printer_settings_screen.dart';
@@ -136,6 +137,47 @@ void main() {
     calls.clear();
     await expectLater(print(), throwsStateError);
     expect(calls.map((call) => call.method), isNot(contains('printPdf')));
+  });
+
+  test('a remembered printer that was unpaired is replaced by the printer paired now', () async {
+    final printed = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(BluetoothPrinterService.channel, (
+          call,
+        ) async {
+          if (call.method == 'builtInAvailable') return false;
+          if (call.method == 'pairedDevices') {
+            return [
+              {'name': 'New Printer', 'address': '99:99:99:99:99:99'},
+            ];
+          }
+          final address = (call.arguments as Map)['address'] as String;
+          if (address != '99:99:99:99:99:99') {
+            throw PlatformException(
+              code: 'bluetooth_print',
+              message:
+                  'الطابعة غير مقترنة. اقترن بها من إعدادات بلوتوث الجهاز.',
+            );
+          }
+          printed.add(address);
+          return null;
+        });
+    final service = PrinterRoutingService(androidBluetooth: true);
+    await service.select(
+      PrintRole.receipt,
+      const Printer(url: 'bluetooth:AA:BB:CC:DD:EE:FF', name: 'Old'),
+    );
+    await service.printPdf(
+      role: PrintRole.receipt,
+      bytes: Uint8List(1),
+      format: PdfPageFormat.roll57,
+      name: 'receipt',
+    );
+    expect(printed, ['99:99:99:99:99:99']);
+    expect(
+      (await service.selected(PrintRole.receipt))!.url,
+      'bluetooth:99:99:99:99:99:99',
+    );
   });
 
   test(
