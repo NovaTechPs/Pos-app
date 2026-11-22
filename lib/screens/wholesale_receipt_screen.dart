@@ -81,6 +81,18 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
     unawaited(_initialize());
   }
 
+  Future<List<dynamic>> _refreshCustomersForPicker() async {
+    final customers = await _customerService.fetchWholesaleParties();
+    if (mounted) {
+      setState(() {
+        _customers
+          ..clear()
+          ..addAll(customers);
+      });
+    }
+    return customers;
+  }
+
   Future<void> _initialize() async {
     try {
       _record = await _checkout.read();
@@ -252,7 +264,7 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
       'total': v['amount'],
       'subtotal': v['amount'],
       'paid_amount': v['amount'],
-      'created_at': v['payment_date'],
+      'created_at': v['created_at'],
       'store_name':
           widget.user['tenant']?['name'] ??
           widget.user['tenant_name'] ??
@@ -461,6 +473,7 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
                       ignoring: _locked,
                       child: CustomerPicker(
                         customers: _customers,
+                        onRefresh: _refreshCustomersForPicker,
                         value: _customerId,
                         label: 'الزبون / المورد',
                         onChanged: (id) => setState(() => _customerId = id),

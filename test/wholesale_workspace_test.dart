@@ -9,7 +9,6 @@ import 'package:waslapos_app/screens/wholesale_screen.dart';
 import 'package:waslapos_app/screens/printer_settings_screen.dart';
 import 'package:waslapos_app/screens/pos_shell.dart';
 import 'package:waslapos_app/screens/pos_screen.dart';
-import 'package:waslapos_app/screens/sales_history_screen.dart';
 import 'package:waslapos_app/screens/wholesale_receipt_screen.dart';
 import 'package:waslapos_app/services/api_client.dart';
 import 'package:waslapos_app/services/api_config.dart';
@@ -218,10 +217,20 @@ void main() {
   tearDown(() => ApiClient.client.close());
 
   for (final platform in [TargetPlatform.android]) {
-    testWidgets('$platform opens wholesale as the initial department', (
+    testWidgets('$platform starts at home and can close every department', (
       tester,
     ) async {
       await tester.pumpWidget(const MaterialApp(home: PosShell(user: user)));
+      await tester.pumpAndSettle();
+      expect(find.text('WaslaPOS'), findsOneWidget);
+      expect(find.byType(WholesaleScreen), findsNothing);
+      await tester.tap(find.text('فتح قسم'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PopupMenuItem<String>), findsNWidgets(3));
+      expect(find.text('إعدادات الطابعات'), findsWidgets);
+      expect(find.text('قائمة الزيارات'), findsNothing);
+      expect(find.text('سجل الفواتير'), findsNothing);
+      await tester.tap(find.text('فاتورة مبيعات').last);
       await tester.pumpAndSettle();
       expect(find.byType(WholesaleScreen), findsOneWidget);
       expect(
@@ -231,6 +240,24 @@ void main() {
         isTrue,
       );
       expect(find.byType(PosScreen), findsNothing);
+      await tester.tap(find.byTooltip('إغلاق فاتورة مبيعات'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('إلغاء'));
+      await tester.pumpAndSettle();
+      expect(find.byType(WholesaleScreen), findsOneWidget);
+      await tester.tap(find.byTooltip('إغلاق فاتورة مبيعات'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('إغلاق التبويب'));
+      await tester.pumpAndSettle();
+      expect(find.text('WaslaPOS'), findsOneWidget);
+      await tester.tap(find.text('سند قبض مستقل'));
+      await tester.pumpAndSettle();
+      expect(find.byType(WholesaleReceiptScreen), findsOneWidget);
+      await tester.tap(find.byTooltip('إغلاق سند قبض مستقل'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('إغلاق التبويب'));
+      await tester.pumpAndSettle();
+      expect(find.text('WaslaPOS'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
@@ -242,9 +269,7 @@ void main() {
   ) async {
     await tester.pumpWidget(const MaterialApp(home: PosShell(user: user)));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('فتح قسم'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('إعدادات الطابعات').last);
+    await tester.tap(find.text('إعدادات الطابعات').first);
     // The settings screen keeps looking for Bluetooth printers, so it never settles.
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.byType(PrinterSettingsScreen), findsOneWidget);
@@ -256,6 +281,8 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(const MaterialApp(home: PosShell(user: user)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('فاتورة مبيعات'));
     await tester.pumpAndSettle();
     expect(find.byType(WholesaleScreen), findsOneWidget);
     expect(find.byType(PosScreen), findsNothing);
@@ -287,13 +314,6 @@ void main() {
     expect(submittedPath, endsWith('/pos/orders'));
     expect(submitted?['total_amount'], 10);
     expect(submitted?['paid_amount'], 0);
-    await tester.ensureVisible(find.text('فتح قسم'));
-    await tester.tap(find.text('فتح قسم'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('سجل الفواتير').last);
-    await tester.pumpAndSettle();
-    expect(find.byType(SalesHistoryScreen), findsOneWidget);
-    expect(find.text('W-8'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();

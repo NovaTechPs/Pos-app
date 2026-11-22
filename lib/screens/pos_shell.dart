@@ -30,6 +30,7 @@ class PosShell extends StatefulWidget {
     final shell = context.findAncestorStateOfType<_PosShellState>();
     if (shell == null) return ModalRoute.of(context)?.isCurrent ?? false;
     return (ModalRoute.of(shell.context)?.isCurrent ?? false) &&
+        shell._tabs.isNotEmpty &&
         shell._tabs[shell._selected].navigator.currentState ==
             Navigator.of(context) &&
         (ModalRoute.of(context)?.isCurrent ?? false);
@@ -61,14 +62,11 @@ class _Department {
 }
 
 class _PosShellState extends State<PosShell> {
+  bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
   late final List<_Department> _tabs = [
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
-      _Department(
-        'فاتورة مبيعات',
-        WholesaleScreen(user: widget.user, salesInvoice: true),
-      )
-    else
-      _Department('نقطة البيع', PosScreen(user: widget.user)),
+    if (!_isAndroid) _Department('نقطة البيع', PosScreen(user: widget.user)),
   ];
   int _selected = 0;
 
@@ -103,7 +101,7 @@ class _PosShellState extends State<PosShell> {
         ],
       ),
     );
-    if (close != true || !mounted) return;
+    if (close != true || !mounted || !_tabs.contains(tab)) return;
     setState(() {
       final current = _tabs[_selected];
       _tabs.remove(tab);
@@ -119,8 +117,6 @@ class _PosShellState extends State<PosShell> {
             salesInvoice: true,
           ),
           'سند قبض مستقل': WholesaleReceiptScreen(user: widget.user),
-          'قائمة الزيارات': CustomerVisitsScreen(user: widget.user),
-          'سجل الفواتير': SalesHistoryScreen(user: widget.user),
           // Phones pick their Bluetooth printer here; without it nothing can print.
           'إعدادات الطابعات': const PrinterSettingsScreen(),
         }
@@ -215,7 +211,7 @@ class _PosShellState extends State<PosShell> {
                   ],
                 ),
               ),
-            if (MediaQuery.sizeOf(context).width >= 1050)
+            if (!_isAndroid && MediaQuery.sizeOf(context).width >= 1050)
               Container(
                 height: 70,
                 padding: const EdgeInsets.symmetric(horizontal: 36),
@@ -315,7 +311,8 @@ class _PosShellState extends State<PosShell> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (MediaQuery.sizeOf(context).width >= 1050) _sidebar(),
+                  if (!_isAndroid && MediaQuery.sizeOf(context).width >= 1050)
+                    _sidebar(),
                   Expanded(
                     child: Column(
                       children: [
@@ -437,28 +434,21 @@ class _PosShellState extends State<PosShell> {
                                                               FontWeight.bold,
                                                         ),
                                                       ),
-                                                      if (i > 0)
-                                                        IconButton(
-                                                          tooltip:
-                                                              'إغلاق ${_tabs[i].title}',
-                                                          onPressed: () =>
-                                                              _close(_tabs[i]),
-                                                          icon: Icon(
-                                                            Icons.close,
-                                                            size: 16,
-                                                            color:
-                                                                i == _selected
-                                                                ? Colors.white
-                                                                : const Color(
-                                                                    0xFF64748B,
-                                                                  ),
-                                                          ),
-                                                        )
-                                                      else
-                                                        const SizedBox(
-                                                          width: 10,
-                                                          height: 40,
+                                                      IconButton(
+                                                        tooltip:
+                                                            'إغلاق ${_tabs[i].title}',
+                                                        onPressed: () =>
+                                                            _close(_tabs[i]),
+                                                        icon: Icon(
+                                                          Icons.close,
+                                                          size: 16,
+                                                          color: i == _selected
+                                                              ? Colors.white
+                                                              : const Color(
+                                                                  0xFF64748B,
+                                                                ),
                                                         ),
+                                                      ),
                                                     ],
                                                   ),
                                                 ),
@@ -469,42 +459,77 @@ class _PosShellState extends State<PosShell> {
                                     ),
                                   ),
                                 ),
-                                if (MediaQuery.sizeOf(context).width < 1050)
+                                if (_isAndroid ||
+                                    MediaQuery.sizeOf(context).width < 1050)
                                   const LogoutButton(),
-                                SyncStatusButton(
-                                  onPressed: () => open(
-                                    'المزامنة والفواتير المحلية',
-                                    const SyncScreen(),
+                                if (!_isAndroid)
+                                  SyncStatusButton(
+                                    onPressed: () => open(
+                                      'المزامنة والفواتير المحلية',
+                                      const SyncScreen(),
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
                         ),
                         Expanded(
-                          child: IndexedStack(
-                            index: _selected,
-                            children: [
-                              for (final tab in _tabs)
-                                TickerMode(
-                                  key: ObjectKey(tab),
-                                  enabled: tab == _tabs[_selected],
-                                  child: Navigator(
-                                    key: tab.navigator,
-                                    onGenerateRoute: (_) =>
-                                        MaterialPageRoute<void>(
-                                          builder: (_) => tab.screen,
+                          child: _tabs.isEmpty
+                              ? _home()
+                              : IndexedStack(
+                                  index: _selected,
+                                  children: [
+                                    for (final tab in _tabs)
+                                      TickerMode(
+                                        key: ObjectKey(tab),
+                                        enabled: tab == _tabs[_selected],
+                                        child: Navigator(
+                                          key: tab.navigator,
+                                          onGenerateRoute: (_) =>
+                                              MaterialPageRoute<void>(
+                                                builder: (_) => tab.screen,
+                                              ),
                                         ),
-                                  ),
+                                      ),
+                                  ],
                                 ),
-                            ],
-                          ),
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _home() => ColoredBox(
+    color: Colors.white,
+    child: Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'WaslaPOS',
+              style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 28),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final entry in _departments.entries)
+                  OutlinedButton(
+                    onPressed: () => open(entry.key, entry.value),
+                    child: Text(entry.key),
+                  ),
+              ],
             ),
           ],
         ),
@@ -559,7 +584,7 @@ class _PosShellState extends State<PosShell> {
 
   Widget _sidebarContent(bool expanded) {
     final departments = _departments;
-    final current = _tabs[_selected].title;
+    final current = _tabs.isEmpty ? null : _tabs[_selected].title;
     const ink = Color(0xFF0F172A);
     const muted = Color(0xFF64748B);
     final primary = Theme.of(context).colorScheme.primary;

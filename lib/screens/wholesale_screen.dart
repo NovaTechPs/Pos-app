@@ -185,6 +185,12 @@ class _WholesaleScreenState extends State<WholesaleScreen>
         });
   }
 
+  Future<List<dynamic>> _refreshCustomersForPicker() async {
+    final customers = await _customerService.fetchWholesaleParties();
+    if (mounted) setState(() => _customers = customers);
+    return customers;
+  }
+
   Future<void> _loadData({
     bool restore = false,
     bool background = false,
@@ -789,6 +795,7 @@ class _WholesaleScreenState extends State<WholesaleScreen>
           ],
         ),
       );
+
   /// Rebuilds the open catalog picker; its dialog is built from this state.
   StateSetter? _pickerRefresh;
 
@@ -872,7 +879,8 @@ class _WholesaleScreenState extends State<WholesaleScreen>
                       child: InkWell(
                         onTap: _locked
                             ? null
-                            : () => _pickProduct(inDialog, () => _addProduct(p)),
+                            : () =>
+                                  _pickProduct(inDialog, () => _addProduct(p)),
                         child: Padding(
                           padding: const EdgeInsets.all(8),
                           child: Column(
@@ -1051,6 +1059,7 @@ class _WholesaleScreenState extends State<WholesaleScreen>
                     const SizedBox(height: 14),
                     CustomerPicker(
                       customers: _customers,
+                      onRefresh: _refreshCustomersForPicker,
                       value: customerId,
                       label: 'الزبون / المورد',
                       onChanged: busy
@@ -1330,6 +1339,7 @@ class _WholesaleScreenState extends State<WholesaleScreen>
                     ignoring: _locked,
                     child: CustomerPicker(
                       customers: _customers,
+                      onRefresh: _refreshCustomersForPicker,
                       value: _customerId,
                       label: 'الزبون / المورد',
                       placeholder: 'عميل نقدي / عابر',
@@ -1380,22 +1390,49 @@ class _WholesaleScreenState extends State<WholesaleScreen>
                     }
                   },
                   itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'new', child: Text('فاتورة جديدة')),
-                    const PopupMenuItem(value: 'browse', child: Text('آخر فاتورة')),
-                    const PopupMenuItem(value: 'search', child: Text('بحث عن فاتورة')),
+                    const PopupMenuItem(
+                      value: 'new',
+                      child: Text('فاتورة جديدة'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'browse',
+                      child: Text('آخر فاتورة'),
+                    ),
+                    const PopupMenuItem(
+                      value: 'search',
+                      child: Text('بحث عن فاتورة'),
+                    ),
                     if (_invoice != null &&
                         (widget.salesInvoice || _previousId != null))
-                      const PopupMenuItem(value: 'previous', child: Text('الفاتورة السابقة')),
+                      const PopupMenuItem(
+                        value: 'previous',
+                        child: Text('الفاتورة السابقة'),
+                      ),
                     if (_invoice != null &&
                         (widget.salesInvoice || _nextId != null))
-                      const PopupMenuItem(value: 'next', child: Text('الفاتورة التالية')),
+                      const PopupMenuItem(
+                        value: 'next',
+                        child: Text('الفاتورة التالية'),
+                      ),
                     if (_readOnly)
-                      const PopupMenuItem(value: 'edit', child: Text('تعديل الفاتورة')),
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Text('تعديل الفاتورة'),
+                      ),
                     if (_editing)
-                      const PopupMenuItem(value: 'cancel-edit', child: Text('إلغاء التعديل')),
-                    const PopupMenuItem(value: 'receipt', child: Text('سند قبض مستقل')),
+                      const PopupMenuItem(
+                        value: 'cancel-edit',
+                        child: Text('إلغاء التعديل'),
+                      ),
+                    const PopupMenuItem(
+                      value: 'receipt',
+                      child: Text('سند قبض مستقل'),
+                    ),
                     if (_invoice != null)
-                      const PopupMenuItem(value: 'invoice-receipt', child: Text('تعديل سند الفاتورة')),
+                      const PopupMenuItem(
+                        value: 'invoice-receipt',
+                        child: Text('تعديل سند الفاتورة'),
+                      ),
                   ],
                 ),
               ],

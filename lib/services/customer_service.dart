@@ -25,15 +25,48 @@ class CustomerService {
   }
 
   Future<List<dynamic>> fetchWholesaleParties() async {
-    final response = await ApiClient.get(
-      Uri.parse('$baseUrl/wholesale/parties'),
-      cacheForOffline: true,
-    );
-    final data = await ApiException.decodeAsync(response);
-    if (data['parties'] is! List) {
-      throw const ApiException('تعذر قراءة الزبائن والموردين.');
+    final endpoint = Uri.parse('$baseUrl/wholesale/parties');
+    Uri? next = endpoint;
+    final visited = <String>{};
+    final parties = <dynamic>[];
+    final ids = <String>{};
+    lastFetchOffline = false;
+    while (next != null) {
+      if (next.origin != endpoint.origin ||
+          next.path != endpoint.path ||
+          !visited.add(next.toString())) {
+        throw const ApiException('تعذر تحميل بقية الزبائن والموردين.');
+      }
+      final response = await ApiClient.get(next, cacheForOffline: true);
+      final data = await ApiException.decodeAsync(response);
+      lastFetchOffline |= response.headers['x-wasla-offline'] == 'true';
+      final payload = data['parties'];
+      final rows = payload is Map ? payload['data'] : payload;
+      if (rows is! List ||
+          rows.any((row) => row is! Map || row['id'] == null)) {
+        throw const ApiException('تعذر قراءة الزبائن والموردين.');
+      }
+      for (final row in rows) {
+        if (ids.add('${row['id']}')) parties.add(row);
+      }
+      final page = payload is Map ? payload : data;
+      final meta = page['meta'] is Map ? page['meta'] as Map : page;
+      final links = page['links'];
+      final nextUrl =
+          page['next_page_url'] ?? (links is Map ? links['next'] : null);
+      final current = int.tryParse('${meta['current_page']}');
+      final last = int.tryParse('${meta['last_page']}');
+      if (nextUrl is String && nextUrl.isNotEmpty) {
+        next = next.resolve(nextUrl);
+      } else if (current != null && last != null && current < last) {
+        next = next.replace(
+          queryParameters: {...next.queryParameters, 'page': '${current + 1}'},
+        );
+      } else {
+        next = null;
+      }
     }
-    return data['parties'];
+    return parties;
   }
 
   Future<Map<String, dynamic>> createCustomer({

@@ -7,6 +7,7 @@ import '../models/sale_data.dart';
 import '../models/payment_summary.dart';
 import '../models/invoice_reference.dart';
 import 'pdf_theme.dart';
+import 'receipt_voucher_layout.dart';
 
 abstract final class ReceiptBuilder {
   /// An 80 mm thermal roll prints only about 72 mm (576 dots); a wider page loses its right edge.
@@ -156,7 +157,23 @@ abstract final class ReceiptBuilder {
           marginLeft: 1.5 * PdfPageFormat.mm,
           marginRight: 1.5 * PdfPageFormat.mm,
         ),
-        build: (_) => pw.Column(
+        build: (_) => order['type'] == 'receipt'
+            ? ReceiptVoucherLayout.build(
+                storeName: storeName?.isNotEmpty == true ? storeName! : 'Wasla POS',
+                reference: invoice,
+                customer: customer?.toString() ?? 'غير محدد',
+                date: DateTime.tryParse('${order['payment_date']}') != null
+                    ? date(DateTime.parse('${order['payment_date']}'))
+                    : created == null ? 'غير متوفر' : date(created),
+                time: created == null ? 'غير متوفر' : time(created),
+                currency: currency,
+                amount: SaleData.number(order['amount']) ?? total,
+                previousBalance: SaleData.number(order['previous_balance']),
+                currentBalance: currentBalance,
+                notes: '${order['notes'] ?? ''}'.trim(),
+                cartSvg: cartIcon,
+              )
+            : pw.Column(
           mainAxisSize: pw.MainAxisSize.min,
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
