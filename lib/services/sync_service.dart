@@ -112,11 +112,17 @@ class SyncService {
               continue;
             }
           }
-          final message =
-              'توجد فاتورة لم يتأكد حفظها على الخادم. تحتاج مراجعة؛ لم يُعد إرسالها. تُرسل بقية الفواتير التي لم تُرسل تلقائياً.';
-          await store.saveOperation({...record, 'message': message});
-          lastError.value = message;
-          continue;
+          // 404: the server holds no result for this ID, so nothing was saved
+          // (a waking server answers 503 or times out). Resending is safe:
+          // the server keeps one result per operation ID and replays it.
+          if (check.statusCode != 404) {
+            final message =
+                'توجد فاتورة لم يتأكد حفظها على الخادم بعد؛ ستُعاد محاولة التحقق منها تلقائياً.';
+            await store.saveOperation({...record, 'message': message});
+            lastError.value = message;
+            continue;
+          }
+          contactedServer = true;
         }
         final shiftId = record['offline_shift_id'];
         if (shiftId == null && record['requires_shift'] != false) {

@@ -582,7 +582,7 @@ void main() {
     expect((await SyncService.records()).single['status'], 'confirmed');
   });
 
-  test('an uncertain invoice is queried only and does not block a later unsent invoice', () async {
+  test('an uncertain invoice the server cannot answer for is not resent and does not block a later unsent invoice', () async {
     ApiClient.offline.value = true;
     await sell(service());
     await sell(service());
@@ -593,21 +593,55 @@ void main() {
     });
     final pendingUuid = records.last['payload']['operation_uuid'];
     var writes = 0;
-    online(
-      sale: (request) async {
-        writes++;
-        expect(jsonDecode(request.body)['operation_uuid'], pendingUuid);
+    ApiClient.client = MockClient((request) async {
+      if (request.url.path.contains('/sale-operations/')) {
+        return http.Response('<html>waking up</html>', 503);
+      }
+      if (request.url.path.endsWith('/shifts/active')) {
         return response({
-          'order': {'id': 92},
-        }, 201);
-      },
-    );
+          'active_shift': {'id': 7},
+        });
+      }
+      writes++;
+      expect(jsonDecode(request.body)['operation_uuid'], pendingUuid);
+      return response({
+        'order': {'id': 92},
+      }, 201);
+    });
     await SyncService.synchronizeAutomatically();
     expect(writes, 1);
     final updated = await SyncService.records();
     expect(updated.first['status'], 'uncertain');
     expect(updated.last['status'], 'confirmed');
     expect(SyncService.currentError, contains('لم يتأكد حفظها'));
+  });
+
+  test('an invoice stuck by a waking server is sent once the server confirms it never saved it', () async {
+    ApiClient.offline.value = true;
+    await sell(service());
+    final uuid =
+        (await SyncService.records()).single['payload']['operation_uuid'];
+
+    // The server is waking: the first send gets an HTML 503 page.
+    online(sale: (_) async => http.Response('<html>waking up</html>', 503));
+    await SyncService.synchronizeAutomatically();
+    expect((await SyncService.records()).single['status'], 'uncertain');
+
+    // Awake: no result is stored for that ID, so the same invoice is sent again.
+    final sent = <String>[];
+    online(
+      sale: (request) async {
+        sent.add(jsonDecode(request.body)['operation_uuid']);
+        return response({
+          'order': {'id': 93},
+        }, 201);
+      },
+    );
+    await SyncService.synchronizeAutomatically();
+    expect(sent, [uuid]);
+    final record = (await SyncService.records()).single;
+    expect(record['status'], 'confirmed');
+    expect(record['order']['id'], 93);
   });
 
   test('changed shift prevents any financial write', () async {
@@ -625,28 +659,41 @@ void main() {
     expect(writes, 0);
     expect((await SyncService.records()).single['status'], 'queued');
   });
-  test(
-    'lost sync reply survives restart and never automatically resubmits',
-    () async {
-      ApiClient.offline.value = true;
-      await sell(service());
-      var writes = 0;
-      online(
-        sale: (_) async {
-          writes++;
-          throw TimeoutException('lost response');
-        },
-      );
-      await expectLater(
-        SyncService.synchronize(),
-        throwsA(isA<TimeoutException>()),
-      );
-      await ApiClient.initialize();
-      await SyncService.synchronize();
-      expect(writes, 1);
-      expect((await SyncService.records()).single['status'], 'sending');
-    },
-  );
+  test('lost sync reply survives restart and is confirmed from the server without resubmitting', () async {
+    ApiClient.offline.value = true;
+    await sell(service());
+    var writes = 0;
+    online(
+      sale: (_) async {
+        writes++;
+        throw TimeoutException('lost response');
+      },
+    );
+    await expectLater(
+      SyncService.synchronize(),
+      throwsA(isA<TimeoutException>()),
+    );
+    await ApiClient.initialize();
+    expect((await SyncService.records()).single['status'], 'sending');
+    // The server saved it before the reply was lost: it answers for the ID.
+    ApiClient.client = MockClient((request) async {
+      if (request.url.path.contains('/sale-operations/')) {
+        return response({
+          'status': 'confirmed',
+          'result': {
+            'order': {'id': 94},
+          },
+        });
+      }
+      if (request.method == 'POST') writes++;
+      return response({'theme': 'blue'});
+    });
+    await SyncService.synchronize();
+    expect(writes, 1);
+    final record = (await SyncService.records()).single;
+    expect(record['status'], 'confirmed');
+    expect(record['order']['id'], 94);
+  });
   test(
     'server rejection stays in the local ledger and is never retried',
     () async {
