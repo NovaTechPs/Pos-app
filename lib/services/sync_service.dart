@@ -298,6 +298,8 @@ class SyncService {
       'offline_shift_id': shiftId,
       'result_key': resultKey,
       'requires_shift': requiresShift,
+      // Kept after sync replaces the order with the server's copy.
+      'local_number': number,
     };
     await store.saveOperation(queued);
     revision.value++;

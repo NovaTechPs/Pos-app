@@ -14,6 +14,7 @@ import 'returns_screen.dart';
 import 'sales_history_screen.dart';
 import 'wholesale_screen.dart';
 import 'customer_visits_screen.dart';
+import 'invoice_status_screen.dart';
 import 'wholesale_receipt_screen.dart';
 import 'sync_screen.dart';
 import 'printer_settings_screen.dart';
@@ -136,6 +137,7 @@ class _PosShellState extends State<PosShell> {
           ),
           // Phones pick their paired Bluetooth printer on the first print.
           'سند قبض مستقل': WholesaleReceiptScreen(user: widget.user),
+          'حالة الفواتير': const InvoiceStatusScreen(),
         }
       : {
           'نقطة البيع': PosScreen(user: widget.user),

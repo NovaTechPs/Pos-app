@@ -745,6 +745,7 @@ class _WholesaleScreenState extends State<WholesaleScreen>
         },
         receiptItems: _cart.map((r) => Map<String, dynamic>.from(r)).toList(),
         cashierName: '${widget.user['name'] ?? ''}',
+        customerName: _customer?['name']?.toString(),
       );
       try {
         _record = await _checkout.read();

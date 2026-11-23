@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:waslapos_app/screens/invoice_status_screen.dart';
 import 'package:waslapos_app/screens/wholesale_screen.dart';
 import 'package:waslapos_app/screens/printer_settings_screen.dart';
 import 'package:waslapos_app/screens/pos_shell.dart';
@@ -226,7 +227,7 @@ void main() {
       expect(find.byType(WholesaleScreen), findsNothing);
       await tester.tap(find.text('فتح قسم'));
       await tester.pumpAndSettle();
-      expect(find.byType(PopupMenuItem<String>), findsNWidgets(2));
+      expect(find.byType(PopupMenuItem<String>), findsNWidgets(3));
       expect(find.text('إعدادات الطابعات'), findsNothing);
       expect(find.text('قائمة الزيارات'), findsNothing);
       expect(find.text('سجل الفواتير'), findsNothing);
@@ -258,6 +259,9 @@ void main() {
       await tester.tap(find.text('إغلاق التبويب'));
       await tester.pumpAndSettle();
       expect(find.text('WaslaPOS'), findsOneWidget);
+      await tester.tap(find.text('حالة الفواتير'));
+      await tester.pumpAndSettle();
+      expect(find.byType(InvoiceStatusScreen), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();

@@ -327,6 +327,7 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
         },
         receiptItems: const [],
         cashierName: '${widget.user['name'] ?? ''}',
+        customerName: _customer?['name']?.toString(),
       );
       try {
         _record = await _checkout.read();

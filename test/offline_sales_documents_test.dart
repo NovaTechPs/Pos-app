@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/material.dart';
 import 'package:http/testing.dart';
+import 'package:waslapos_app/screens/invoice_status_screen.dart';
 import 'package:waslapos_app/services/api_client.dart';
 import 'package:waslapos_app/services/api_config.dart';
 import 'package:waslapos_app/services/automatic_sync.dart';
@@ -272,6 +274,64 @@ void main() {
     expect(record['status'], 'confirmed');
     expect(ApiClient.offline.value, isFalse);
   });
+
+  testWidgets(
+    'the invoice status section shows what reached the system with its system number',
+    (tester) async {
+      await tester.runAsync(() async {
+        noNetwork();
+        await invoices().checkout(
+          payload: invoice,
+          receiptItems: const [],
+          cashierName: 'مندوب',
+          customerName: 'معالي ستور',
+        );
+        await receipts().checkout(
+          payload: receipt,
+          receiptItems: const [],
+          cashierName: 'مندوب',
+          customerName: 'معالي ستور',
+        );
+        // Only the invoice reaches the system; the receipt keeps waiting.
+        ApiClient.client = MockClient((request) async {
+          if (request.url.path.endsWith('/pos/orders')) {
+            return json({
+              'order': {'id': 51, 'invoice_number': 'A3-5', 'total': 25},
+            }, 201);
+          }
+          if (request.method == 'POST') {
+            throw http.ClientException('connection lost');
+          }
+          return json({'theme': 'blue'});
+        });
+        await SyncService.synchronize().catchError((_) {});
+      });
+      await tester.pumpWidget(const MaterialApp(home: InvoiceStatusScreen()));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+
+      expect(find.text('فاتورة مبيعات OFF000001'), findsOneWidget);
+      expect(
+        find.textContaining('مرحّلة — فاتورة مبيعات رقم A3-5 على النظام'),
+        findsOneWidget,
+      );
+      expect(find.text('سند قبض OFF000002'), findsOneWidget);
+      expect(find.textContaining('لم تُرحّل'), findsWidgets);
+      expect(find.textContaining('معالي ستور'), findsNWidgets(2));
+
+      await tester.tap(find.text('مرحّلة (1)'));
+      await tester.pump();
+      expect(find.text('فاتورة مبيعات OFF000001'), findsOneWidget);
+      expect(find.text('سند قبض OFF000002'), findsNothing);
+
+      await tester.tap(find.text('لم تُرحّل (1)'));
+      await tester.pump();
+      expect(find.text('فاتورة مبيعات OFF000001'), findsNothing);
+      expect(find.text('سند قبض OFF000002'), findsOneWidget);
+    },
+  );
 
   test('a document the server rejects during sync stays for review', () async {
     noNetwork();
