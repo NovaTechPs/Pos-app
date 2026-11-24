@@ -262,7 +262,9 @@ class _WholesaleReceiptScreenState extends State<WholesaleReceiptScreen> {
       'type': 'receipt',
       'document_title': 'سند قبض',
       'invoice_number': v['voucher_number'],
-      'customer_name': v['party']?['name'],
+      // A receipt saved offline has no server party yet: fall back to its saved or selected name.
+      'customer_name':
+          v['party']?['name'] ?? v['customer_name'] ?? _customer?['name'],
       'total': v['amount'],
       'subtotal': v['amount'],
       'paid_amount': v['amount'],

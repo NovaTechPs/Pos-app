@@ -729,4 +729,26 @@ void main() {
     expect(await OfflineStore('A').operations(), hasLength(1));
     expect(await OfflineStore('B').operations(), isEmpty);
   });
+
+  test(
+    'a receipt saved offline keeps the customer name for printing',
+    () async {
+      ApiClient.offline.value = true;
+      final result =
+          await CheckoutService(
+            scope: 'receipt-1',
+            offlineEndpoint: 'wholesale/receipts',
+            resultKey: 'voucher',
+            requireOfflineShift: false,
+          ).checkout(
+            payload: {'branch_id': 1, 'customer_id': 5, 'amount': 30},
+            receiptItems: const [],
+            cashierName: 'كاشير',
+            customerName: 'أبو الأمير',
+          );
+      expect(result['queued'], true);
+      expect(result['order']['customer_name'], 'أبو الأمير');
+      expect(result['order']['customer_id'], 5);
+    },
+  );
 }

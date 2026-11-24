@@ -289,6 +289,9 @@ class SyncService {
       'offline_pending': true,
       'total': total,
       'paid_amount': payload['paid_amount'] ?? total,
+      // Printed before the server replies, so the receipt still shows who it is for.
+      if (record['customer_name'] != null)
+        'customer_name': record['customer_name'],
     };
     final queued = {
       ...record,
