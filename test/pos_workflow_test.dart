@@ -475,7 +475,8 @@ void main() {
           tester.widget<PosWorkspace>(find.byType(PosWorkspace));
       final search = find.byKey(const Key('pos-catalog-search'));
       expect(find.byKey(const Key('pos-product-table-header')), findsOneWidget);
-      expect(find.text('عروض'), findsOneWidget);
+      // Like the web POS, «عروض» shows only when a product has an offer.
+      expect(find.text('عروض'), findsNothing);
 
       await tester.enterText(search, 'ITEM4');
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -491,9 +492,16 @@ void main() {
       expect(tester.widget<TextField>(search).controller!.text, isEmpty);
       expect(find.byKey(const ValueKey('pos-product-1')), findsOneWidget);
 
-      await tester.tap(find.text('عروض'));
+      // Web «سعر البيع — اختياري»: only products sold at that price.
+      final price = find.byKey(const Key('pos-price-filter'));
+      await tester.enterText(price, '987654');
       await tester.pumpAndSettle();
-      expect(find.text('لا توجد عروض'), findsOneWidget);
+      expect(find.text('لا توجد منتجات مطابقة'), findsOneWidget);
+      final firstPrice = workspace().priceFor(workspace().products.first)!;
+      await tester.enterText(price, firstPrice.toStringAsFixed(2));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('pos-product-0')), findsOneWidget);
+      await tester.enterText(price, '');
       await tester.tap(find.text('الكل'));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('pos-product-0')), findsOneWidget);

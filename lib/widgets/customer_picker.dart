@@ -13,6 +13,7 @@ class CustomerPicker extends StatelessWidget {
     this.placeholder = 'عميل نقدي',
     this.label,
     this.onRefresh,
+    this.appearance,
   });
 
   final List<dynamic> customers;
@@ -21,6 +22,10 @@ class CustomerPicker extends StatelessWidget {
   final String placeholder;
   final String? label;
   final Future<List<dynamic>> Function()? onRefresh;
+
+  /// Draws the closed picker from the shown name and whether a customer is chosen (the desktop POS
+  /// uses the web «إضافة زبون للفاتورة» button); the dropdown field is used when null.
+  final Widget Function(String name, bool chosen)? appearance;
 
   Future<void> _open(BuildContext context) async {
     final refreshFuture = onRefresh?.call();
@@ -195,6 +200,13 @@ class CustomerPicker extends StatelessWidget {
           break;
         }
       }
+    }
+    if (appearance != null) {
+      return InkWell(
+        onTap: () => _open(context),
+        borderRadius: BorderRadius.circular(12),
+        child: appearance!(name, value != null),
+      );
     }
     return InkWell(
       onTap: () => _open(context),

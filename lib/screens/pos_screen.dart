@@ -96,6 +96,9 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   String _searchQuery = '';
   bool _mergeSimilar = true;
   String _invoiceNotes = '';
+
+  /// Web «اسم المستلم على الفاتورة»; empty prints the customer's name.
+  String _recipientName = '';
   double _discount = 0.0;
   double _deliveryFee = 0;
   double? _discountPercent;
@@ -1357,6 +1360,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
           _cart.clear();
           _localHeldId = null;
           _invoiceNotes = '';
+          _recipientName = '';
           _discountPercent = null;
           _discount = 0;
           _deliveryFee = 0;
@@ -1400,6 +1404,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         setState(() {
           _cart.clear();
           _invoiceNotes = '';
+          _recipientName = '';
           _activeHeldOrderId = null;
           _localHeldId = null;
           _editingInvoiceId = null;
@@ -1558,6 +1563,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         _heldRecord = record;
         _cart.clear();
         _invoiceNotes = '';
+        _recipientName = '';
         _discountPercent = null;
         _discount = 0;
         _deliveryFee = 0;
@@ -1676,6 +1682,8 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       } else {
         _cart.add({
           'product_id': SaleData.id(product['id']),
+          // Shown in the desktop invoice line, as the web POS shows it.
+          'product_number': product['product_number'],
           'name': product['name'] ?? 'منتج',
           'price': price,
           'quantity': quantity,
@@ -1757,6 +1765,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       setState(() {
         _cart.clear();
         _invoiceNotes = '';
+        _recipientName = '';
         _discountPercent = null;
         _discount = 0;
         _deliveryFee = 0;
@@ -2039,10 +2048,17 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _browseInvoice({bool next = false, bool search = false}) async {
+  /// [searchText] comes from the desktop toolbar field and skips the search dialog.
+  Future<void> _browseInvoice({
+    bool next = false,
+    bool search = false,
+    String? searchText,
+  }) async {
     if (_isCheckingOut || _isRepricing) return;
-    String? query;
-    if (search) {
+    String? query = searchText;
+    if (searchText != null) {
+      search = true;
+    } else if (search) {
       final controller = TextEditingController();
       query = await showDialog<String>(
         context: context,
@@ -2158,6 +2174,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       _editingInvoiceId = null;
       _selectedCustomerId = null;
       _invoiceNotes = '';
+      _recipientName = '';
       _discountPercent = null;
       _discount = 0;
       _deliveryFee = 0;
@@ -2307,6 +2324,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
           _discount = 0;
           _deliveryFee = 0;
           _invoiceNotes = '';
+          _recipientName = '';
         });
       }
       if (mounted) _showMessage('تم حذف الفاتورة وإعادة المخزون.');
@@ -2553,6 +2571,8 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
           'local_held_id': ?localHeldId,
           if (_editingInvoiceId != null) 'invoice_id': _editingInvoiceId,
           if (_selectedCustomerId != null) 'customer_id': _selectedCustomerId,
+          if (_recipientName.trim().isNotEmpty)
+            'customer_name': _recipientName.trim(),
           'subtotal': _subtotal,
           'tax_amount': _taxAmount,
           'discount': _discount,
@@ -2564,6 +2584,13 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         },
         receiptItems: items,
         cashierName: widget.user['name']?.toString() ?? 'كاشير',
+        customerName: _recipientName.trim().isNotEmpty
+            ? _recipientName.trim()
+            : _customers
+                  .whereType<Map>()
+                  .where((c) => SaleData.id(c['id']) == _selectedCustomerId)
+                  .firstOrNull?['name']
+                  ?.toString(),
         heldOrderId: heldOrderId,
         offlineShiftId: _activeShift?['id'],
         probeWhenOffline: _networkAvailable,
@@ -2573,6 +2600,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         setState(() {
           _cart.clear();
           _invoiceNotes = '';
+          _recipientName = '';
           _activeHeldOrderId = null;
           _localHeldId = null;
           _editingInvoiceId = null;
@@ -2669,6 +2697,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       _localHeldId = null;
       _selectedCustomerId = null;
       _invoiceNotes = '';
+      _recipientName = '';
       _discountPercent = null;
       _discount = 0;
       _deliveryFee = 0;
@@ -2804,6 +2833,13 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
                             Expanded(
                               child: PosWorkspace(
                                 embedded: PosShell.contains(context),
+                                onInvoiceSearch: (text) =>
+                                    _browseInvoice(searchText: text),
+                                recipientName: _recipientName,
+                                onRecipientName: (name) {
+                                  _recipientName = name;
+                                  _persistDraft();
+                                },
                                 addedLine: _addedLine,
                                 addCount: _addCount,
                                 mergeSimilar: _mergeSimilar,

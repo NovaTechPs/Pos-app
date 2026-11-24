@@ -43,6 +43,28 @@ void main() {
               );
             await loader.load();
           }
+          // The desktop POS uses Tahoma, like the web POS.
+          final tahoma = FontLoader('Tahoma');
+          for (final file in [
+            r'C:\Windows\Fonts\tahoma.ttf',
+            r'C:\Windows\Fonts\tahomabd.ttf',
+          ]) {
+            if (File(file).existsSync()) {
+              tahoma.addFont(
+                Future.value(
+                  ByteData.sublistView(File(file).readAsBytesSync()),
+                ),
+              );
+            }
+          }
+          await tahoma.load();
+          final emoji = File(r'C:\Windows\Fonts\seguiemj.ttf');
+          if (emoji.existsSync()) {
+            await (FontLoader('Segoe UI Emoji')..addFont(
+                  Future.value(ByteData.sublistView(emoji.readAsBytesSync())),
+                ))
+                .load();
+          }
           final numbers = FontLoader('Consolas')
             ..addFont(
               Future.value(
@@ -199,6 +221,21 @@ void main() {
           tester.widget<PosWorkspace>(find.byType(PosWorkspace)).cart,
           hasLength(1),
         );
+        if (const bool.fromEnvironment('WRITE_UI_PREVIEWS')) {
+          await tester.runAsync(() async {
+            final boundary = tester.renderObject<RenderRepaintBoundary>(
+              find.byKey(const Key('full-reference')),
+            );
+            final image = await boundary.toImage(pixelRatio: config.density);
+            final bytes = await image.toByteData(
+              format: ui.ImageByteFormat.png,
+            );
+            File(
+              'tmp/ui/desktop-reference-items-${(config.density * 100).round()}.png',
+            ).writeAsBytesSync(bytes!.buffer.asUint8List());
+            image.dispose();
+          });
+        }
         await tester.tap(find.text('بطاقة'));
         await tester.pumpAndSettle();
         expect(

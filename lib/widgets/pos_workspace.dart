@@ -72,7 +72,17 @@ class PosWorkspace extends StatefulWidget {
     this.onMobileAdd,
     this.addedLine = -1,
     this.addCount = 0,
+    this.onInvoiceSearch,
+    this.recipientName = '',
+    this.onRecipientName,
   });
+
+  /// Desktop toolbar search: opens a saved invoice by number or ID, like the web POS.
+  final ValueChanged<String>? onInvoiceSearch;
+
+  /// Web «اسم المستلم على الفاتورة»: the name printed on the invoice; empty means the customer's name.
+  final String recipientName;
+  final ValueChanged<String>? onRecipientName;
 
   /// Index of the line just added and a counter bumped on every add; the
   /// desktop invoice table scrolls to that line each time.
@@ -153,25 +163,27 @@ class _PosWorkspaceState extends State<PosWorkspace> {
 
   final _productsKeyboard = GlobalKey<PosProductKeyboardState>();
   final _productsScroll = ScrollController();
-  Widget _numberCell(int row, int col, double value) => PosNumberCell(
-    key: ValueKey('pos-cart-$row-$col'),
-    value: value,
-    node: _cartKeyboard.node(row, col),
-    quantity: col == 0,
-    readOnly: col != 0 && widget.cart[row]['gift'] == true,
-    onKey: (event) => _cartKeyboard.handle(
-      event,
-      row,
-      col,
-      widget.cart.length,
-      widget.barcodeFocus,
-    ),
-    onValue: (value) => widget.onLineValue?.call(
-      row,
-      ['quantity', 'price', 'subtotal'][col],
-      value,
-    ),
-  );
+  Widget _numberCell(int row, int col, double value, {PosCellLook? look}) =>
+      PosNumberCell(
+        key: ValueKey('pos-cart-$row-$col'),
+        value: value,
+        look: look,
+        node: _cartKeyboard.node(row, col),
+        quantity: col == 0,
+        readOnly: col != 0 && widget.cart[row]['gift'] == true,
+        onKey: (event) => _cartKeyboard.handle(
+          event,
+          row,
+          col,
+          widget.cart.length,
+          widget.barcodeFocus,
+        ),
+        onValue: (value) => widget.onLineValue?.call(
+          row,
+          ['quantity', 'price', 'subtotal'][col],
+          value,
+        ),
+      );
   bool _showCart = false;
   String _catalogQuery = '';
   final _catalogSearch = TextEditingController();
@@ -228,14 +240,41 @@ class _PosWorkspaceState extends State<PosWorkspace> {
       (SaleData.number(product['offer_quantity']) ?? 0) > 0 &&
       SaleData.number(product['offer_price']) != null;
   List<dynamic>? _offerSource, _offerProducts;
+
+  /// Web «سعر البيع — اختياري»: only products sold at this price in the branch.
+  final _priceFilter = TextEditingController();
+  double? _priceQuery;
+  final _invoiceSearch = TextEditingController();
+  late final _recipient = TextEditingController(text: widget.recipientName);
+  List<dynamic>? _priceSource, _priceProducts;
+  double? _pricedFor;
   List<dynamic> get _deskProducts {
-    final products = _visibleProducts;
-    if (!_offersOnly) return products;
-    if (!identical(_offerSource, products)) {
-      _offerSource = products;
-      _offerProducts = products.where(_hasOffer).toList(growable: false);
+    var products = _visibleProducts;
+    if (_offersOnly) {
+      if (!identical(_offerSource, products)) {
+        _offerSource = products;
+        _offerProducts = products.where(_hasOffer).toList(growable: false);
+      }
+      products = _offerProducts!;
     }
-    return _offerProducts!;
+    final price = _priceQuery;
+    if (price == null) return products;
+    if (!identical(_priceSource, products) || _pricedFor != price) {
+      _priceSource = products;
+      _pricedFor = price;
+      _priceProducts = products
+          .where((product) {
+            final value = widget.priceFor(product);
+            return value != null && (value - price).abs() < .005;
+          })
+          .toList(growable: false);
+    }
+    return _priceProducts!;
+  }
+
+  void _onPriceFilter(String value) {
+    final price = value.trim().isEmpty ? null : SaleData.number(value);
+    if (price != _priceQuery) setState(() => _priceQuery = price);
   }
 
   /// Web: Enter in the search adds an exact barcode/number match or the only
@@ -277,17 +316,25 @@ class _PosWorkspaceState extends State<PosWorkspace> {
 
   bool _keyboardEnabled = false;
   final _discount = TextEditingController();
+
+  /// No discount shows an empty field with the hint «0», as on the web POS.
+  String _discountText(double value) =>
+      value == 0 ? '' : value.toStringAsFixed(2);
   String? _discountError;
 
   @override
   void initState() {
     super.initState();
-    _discount.text = widget.discount.toStringAsFixed(2);
+    _discount.text = _discountText(widget.discount);
   }
 
   @override
   void didUpdateWidget(PosWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // A new or reopened invoice brings its own recipient name.
+    if (widget.recipientName != _recipient.text) {
+      _recipient.text = widget.recipientName;
+    }
     if (oldWidget.addCount != widget.addCount && widget.addedLine >= 0) {
       // After this frame lays out the new line.
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -305,7 +352,7 @@ class _PosWorkspaceState extends State<PosWorkspace> {
     });
     if (oldWidget.discount != widget.discount &&
         SaleData.number(_discount.text) != widget.discount) {
-      _discount.text = widget.discount.toStringAsFixed(2);
+      _discount.text = _discountText(widget.discount);
       _discountError = null;
     }
     if (widget.subtotal < (SaleData.number(_discount.text) ?? 0)) {
@@ -313,7 +360,7 @@ class _PosWorkspaceState extends State<PosWorkspace> {
     }
     if (widget.cart.isEmpty) {
       _paid.clear();
-      _discount.text = '0.00';
+      _discount.text = '';
       _discountError = null;
     }
   }
@@ -327,6 +374,9 @@ class _PosWorkspaceState extends State<PosWorkspace> {
     _catalogSearch.dispose();
     _paid.dispose();
     _discount.dispose();
+    _priceFilter.dispose();
+    _invoiceSearch.dispose();
+    _recipient.dispose();
     super.dispose();
   }
 
@@ -706,11 +756,14 @@ class _PosWorkspaceState extends State<PosWorkspace> {
                   ),
                   decoration: InputDecoration(
                     labelText: 'خصم الفاتورة',
+                    hintText: '0',
                     errorText: _discountError,
                     isDense: true,
                   ),
                   onChanged: (value) {
-                    final discount = SaleData.number(value);
+                    final discount = value.trim().isEmpty
+                        ? 0.0
+                        : SaleData.number(value);
                     final valid =
                         discount != null &&
                         discount >= 0 &&
@@ -787,255 +840,8 @@ class _PosWorkspaceState extends State<PosWorkspace> {
 
   Widget _desktop() => _matchedDesktop();
 
-  Widget _desktopInvoice() => Card(
-    margin: EdgeInsets.zero,
-    child: Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  key: const Key('pos-barcode-input'),
-                  controller: widget.barcodeController,
-                  focusNode: widget.barcodeFocus,
-                  onChanged: widget.onBarcode,
-                  onSubmitted: widget.onSubmitBarcode,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  decoration: const InputDecoration(
-                    hintText: 'امسح أو أدخل الباركود...',
-                    hintStyle: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF94A3B8),
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 17,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(15)),
-                      borderSide: BorderSide(
-                        color: Color(0xFF3B82F6),
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.outlined(
-                onPressed: widget.onScan,
-                style: IconButton.styleFrom(
-                  fixedSize: const Size(54, 54),
-                  foregroundColor: const Color(0xFF2563EB),
-                  side: const BorderSide(color: Color(0xFFBFDBFE)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                icon: const Icon(Icons.photo_camera_outlined),
-                tooltip: 'مسح بالكاميرا',
-              ),
-            ],
-          ),
-        ),
+  Widget _desktopInvoice() => _webInvoice();
 
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          child: Row(
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'تجميع الأصناف المتشابهة',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                  ),
-                  Text(
-                    'كل إضافة تظهر كسطر مستقل',
-                    style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'الكمية: ${_quantity(widget.cart.fold<double>(0, (sum, item) => sum + (SaleData.number(item['quantity']) ?? 0)))}',
-              ),
-              const Spacer(),
-              Switch(
-                value: widget.mergeSimilar,
-                onChanged: widget.onMergeSimilar,
-              ),
-            ],
-          ),
-        ),
-        Container(
-          color: const Color(0xFFF1F5F9),
-          padding: const EdgeInsets.all(12),
-          child: const Row(
-            children: [
-              SizedBox(width: 30, child: Text('#')),
-              SizedBox(
-                width: 58,
-                child: Text('رقم\nالمنتج', textAlign: TextAlign.center),
-              ),
-              Expanded(flex: 3, child: Text('الصنف')),
-              SizedBox(
-                width: 136,
-                child: Text('الكمية', textAlign: TextAlign.center),
-              ),
-              Expanded(child: Text('السعر', textAlign: TextAlign.center)),
-              Expanded(child: Text('المتبقي', textAlign: TextAlign.center)),
-              Expanded(child: Text('الإجمالي', textAlign: TextAlign.center)),
-              SizedBox(width: 40),
-            ],
-          ),
-        ),
-        Expanded(
-          child: widget.cart.isEmpty
-              ? const Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.receipt_long_outlined,
-                          size: 56,
-                          color: Color(0xFFB8C4D6),
-                        ),
-                        SizedBox(height: 12),
-                      ],
-                    ),
-                  ),
-                )
-              : ListView(
-                  key: const Key('pos-invoice-lines'),
-                  controller: _invoiceScroll,
-                  children: List.generate(widget.cart.length, (index) {
-                    final item = widget.cart[index];
-                    return Padding(
-                      key: _lineKey(index),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(width: 30, child: Text('${index + 1}')),
-                          SizedBox(
-                            width: 58,
-                            child: Text(item['product_id']?.toString() ?? '—'),
-                          ),
-                          Expanded(
-                            flex: 3,
-                            child: Text(
-                              "${item['name'] ?? 'منتج'}${item['gift'] == true ? ' — هدية' : ''}",
-                            ),
-                          ),
-                          SizedBox(
-                            width: 136,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                IconButton(
-                                  onPressed: () => widget.onQuantity(index, -1),
-                                  icon: const Icon(Icons.remove_circle_outline),
-                                  tooltip: 'تقليل الكمية',
-                                ),
-                                Expanded(
-                                  child: widget.onLineValue != null
-                                      ? _numberCell(
-                                          index,
-                                          0,
-                                          SaleData.number(item['quantity']) ??
-                                              1,
-                                        )
-                                      : InkWell(
-                                          key: ValueKey('pos-edit-line-$index'),
-                                          onTap: widget.onEditLine == null
-                                              ? null
-                                              : () => widget.onEditLine!(index),
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(4),
-                                            child: FittedBox(
-                                              fit: BoxFit.scaleDown,
-                                              child: Text(
-                                                _quantity(item['quantity']),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                ),
-                                IconButton(
-                                  onPressed: () => widget.onQuantity(index, 1),
-                                  icon: const Icon(Icons.add_circle_outline),
-                                  tooltip: 'زيادة الكمية',
-                                ),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: widget.onLineValue != null
-                                ? _numberCell(
-                                    index,
-                                    1,
-                                    (SaleData.number(item['price']) ?? 0) -
-                                        (SaleData.number(item['discount']) ??
-                                            0),
-                                  )
-                                : Text(
-                                    _money(
-                                      (SaleData.number(item['price']) ?? 0) -
-                                          (SaleData.number(item['discount']) ??
-                                              0),
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              _stockLabel(item, project: true),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          Expanded(
-                            child: widget.onLineValue != null
-                                ? _numberCell(
-                                    index,
-                                    2,
-                                    SaleData.lineTotal(item),
-                                  )
-                                : Text(
-                                    _money(SaleData.lineTotal(item)),
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                          ),
-                          SizedBox(
-                            width: 40,
-                            child: IconButton(
-                              onPressed: () => widget.onRemove(index),
-                              icon: const Icon(Icons.close),
-                              tooltip: 'حذف الصنف',
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ),
-        ),
-      ],
-    ),
-  );
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
