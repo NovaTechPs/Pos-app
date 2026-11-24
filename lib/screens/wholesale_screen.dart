@@ -681,21 +681,24 @@ class _WholesaleScreenState extends State<WholesaleScreen>
       );
       return;
     }
-    final rawDiscount = SaleData.number(_discountController.text);
-    final rawPaid = _paidController.text.trim().isEmpty
-        ? 0
-        : SaleData.number(_paidController.text);
-    if (rawDiscount == null ||
-        rawDiscount < 0 ||
-        (_discountType == 'percentage'
-            ? rawDiscount > 100
-            : rawDiscount > _subtotal) ||
-        rawPaid == null ||
-        rawPaid < 0 ||
-        (_customerId == null && (rawPaid - _total).abs() > .005)) {
-      _message('اختر عميلاً عند وجود مبلغ متبقٍ أو دفعة زائدة عن الفاتورة');
+    final problem = SaleData.invoiceSaveProblem(
+      discountText: _discountController.text,
+      percentageDiscount: _discountType == 'percentage',
+      subtotal: _subtotal,
+      paidText: _paidController.text,
+      total: _total,
+      hasCustomer: _customerId != null,
+    );
+    if (problem != null) {
+      _message(problem);
       return;
     }
+    final rawDiscount = _discountController.text.trim().isEmpty
+        ? 0.0
+        : SaleData.number(_discountController.text)!;
+    final rawPaid = _paidController.text.trim().isEmpty
+        ? 0.0
+        : SaleData.number(_paidController.text)!;
     bool belowCost = _cart.any(
       (r) => number(r['price']) < number(r['cost_price']),
     );

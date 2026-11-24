@@ -17,6 +17,36 @@ void main() {
       expect(SaleData.id(12.5), isNull);
     },
   );
+  test('invoice save check counts an empty discount as zero and names the real problem', () {
+    String? problem({
+      String discount = '0',
+      bool percentage = false,
+      String paid = '105',
+      bool customer = true,
+    }) => SaleData.invoiceSaveProblem(
+      discountText: discount,
+      percentageDiscount: percentage,
+      subtotal: 105,
+      paidText: paid,
+      total: 105,
+      hasCustomer: customer,
+    );
+
+    expect(problem(discount: ''), isNull);
+    expect(problem(discount: '  ', paid: ''), isNull);
+    expect(problem(customer: false), isNull);
+    expect(problem(discount: 'abc'), 'قيمة الخصم غير صحيحة');
+    expect(problem(discount: '200'), 'الخصم أكبر من مجموع الفاتورة');
+    expect(
+      problem(discount: '101', percentage: true),
+      'نسبة الخصم لا يمكن أن تزيد عن 100%',
+    );
+    expect(problem(paid: '-1'), 'المبلغ المدفوع غير صحيح');
+    expect(
+      problem(paid: '50', customer: false),
+      'اختر عميلاً عند وجود مبلغ متبقٍ أو دفعة زائدة عن الفاتورة',
+    );
+  });
   test(
     'bundle offers span duplicate rows, exclude gifts, and preserve rounding',
     () {

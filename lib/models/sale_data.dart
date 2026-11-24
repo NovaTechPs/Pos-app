@@ -103,6 +103,35 @@ abstract final class SaleData {
     }
   }
 
+  /// Why an invoice cannot be saved yet, or null when it can.
+  /// Empty discount and paid fields count as zero.
+  static String? invoiceSaveProblem({
+    required String discountText,
+    required bool percentageDiscount,
+    required double subtotal,
+    required String paidText,
+    required double total,
+    required bool hasCustomer,
+  }) {
+    final discount = discountText.trim().isEmpty ? 0 : number(discountText);
+    if (discount == null || discount < 0) {
+      return 'قيمة الخصم غير صحيحة';
+    }
+    if (percentageDiscount ? discount > 100 : discount > subtotal + .005) {
+      return percentageDiscount
+          ? 'نسبة الخصم لا يمكن أن تزيد عن 100%'
+          : 'الخصم أكبر من مجموع الفاتورة';
+    }
+    final paid = paidText.trim().isEmpty ? 0 : number(paidText);
+    if (paid == null || paid < 0) {
+      return 'المبلغ المدفوع غير صحيح';
+    }
+    if (!hasCustomer && (paid - total).abs() > .005) {
+      return 'اختر عميلاً عند وجود مبلغ متبقٍ أو دفعة زائدة عن الفاتورة';
+    }
+    return null;
+  }
+
   static double lineTotal(Map<dynamic, dynamic> line) {
     final price = number(line['price']);
     final discount = number(line['discount'] ?? 0);
