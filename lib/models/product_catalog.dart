@@ -62,14 +62,36 @@ class ProductCatalog {
     final words = query.split(' ');
     return _lastResult = query.isEmpty
         ? (categoryId == null ? _all : _categories[categoryId] ?? const [])
-        : _entries
-              .where(
-                (entry) =>
-                    words.every(entry.name.contains) ||
-                    entry.codes.any((code) => code.contains(query)),
-              )
-              .map((entry) => entry.product)
-              .toList(growable: false);
+        : _byStock(
+            _entries
+                .where(
+                  (entry) =>
+                      words.every(entry.name.contains) ||
+                      entry.codes.any((code) => code.contains(query)),
+                )
+                .toList(),
+            query,
+          );
+  }
+
+  /// Exact barcode or product number first (a scan stays on top), then from the
+  /// most to the least stock; equal items keep their catalog order.
+  static List<dynamic> _byStock(List<_Entry> matches, String query) {
+    int exact(_Entry entry) =>
+        entry.codes.contains(query) ||
+            normalizeSearch('${entry.product['product_number'] ?? ''}') == query
+        ? 0
+        : 1;
+    double stock(_Entry entry) =>
+        SaleData.number(entry.product['stock_quantity']) ?? 0;
+    final ranked = [for (var i = 0; i < matches.length; i++) (i, matches[i])];
+    ranked.sort((a, b) {
+      final byExact = exact(a.$2).compareTo(exact(b.$2));
+      if (byExact != 0) return byExact;
+      final byStock = stock(b.$2).compareTo(stock(a.$2));
+      return byStock != 0 ? byStock : a.$1.compareTo(b.$1);
+    });
+    return List<dynamic>.unmodifiable(ranked.map((item) => item.$2.product));
   }
 
   /// True when every word of an already normalized [query] appears in [text], in any order,

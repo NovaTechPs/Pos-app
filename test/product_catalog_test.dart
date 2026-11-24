@@ -3,6 +3,34 @@ import 'package:waslapos_app/models/product_catalog.dart';
 
 void main() {
   test(
+    'search lists the most stock first and keeps an exact barcode on top',
+    () {
+      final catalog = ProductCatalog([
+        {
+          'products': [
+            {'id': 1, 'name': 'كوستر قش تركي', 'stock_quantity': 2},
+            {'id': 2, 'name': 'كوستر قش اطار', 'stock_quantity': '40'},
+            {'id': 3, 'name': 'كوستر قش حجم 50', 'stock_quantity': null},
+            {'id': 4, 'name': 'كوستر قش صغير', 'stock_quantity': 15},
+            {'id': 5, 'name': 'صنف آخر', 'barcode': '777', 'stock_quantity': 1},
+            {
+              'id': 6,
+              'name': 'صنف ثاني',
+              'barcode': '7771',
+              'stock_quantity': 90,
+            },
+          ],
+        },
+      ]);
+      List<Object?> ids(String query) =>
+          catalog.search(query, null).map((product) => product['id']).toList();
+
+      expect(ids('كوستر قش'), [2, 4, 1, 3]);
+      expect(ids('777'), [5, 6]);
+      expect(ids(''), [1, 2, 3, 4, 5, 6]);
+    },
+  );
+  test(
     'complete barcode detection never consumes a prefix of a longer code',
     () {
       final catalog = ProductCatalog([
