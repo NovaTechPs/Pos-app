@@ -159,12 +159,16 @@ abstract final class ReceiptBuilder {
         ),
         build: (_) => order['type'] == 'receipt'
             ? ReceiptVoucherLayout.build(
-                storeName: storeName?.isNotEmpty == true ? storeName! : 'Wasla POS',
+                storeName: storeName?.isNotEmpty == true
+                    ? storeName!
+                    : 'Wasla POS',
                 reference: invoice,
                 customer: customer?.toString() ?? 'غير محدد',
                 date: DateTime.tryParse('${order['payment_date']}') != null
                     ? date(DateTime.parse('${order['payment_date']}'))
-                    : created == null ? 'غير متوفر' : date(created),
+                    : created == null
+                    ? 'غير متوفر'
+                    : date(created),
                 time: created == null ? 'غير متوفر' : time(created),
                 currency: currency,
                 amount: SaleData.number(order['amount']) ?? total,
@@ -174,210 +178,217 @@ abstract final class ReceiptBuilder {
                 cartSvg: cartIcon,
               )
             : pw.Column(
-          mainAxisSize: pw.MainAxisSize.min,
-          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-          children: [
-            // Store name with a cart, then the document title, like a printed shop invoice.
-            if (storeName != null && storeName.isNotEmpty)
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.center,
+                mainAxisSize: pw.MainAxisSize.min,
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                 children: [
-                  pw.Flexible(child: text(storeName, size: 15)),
-                  pw.SizedBox(width: 4),
-                  pw.SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: pw.SvgImage(svg: cartIcon),
-                  ),
-                ],
-              ),
-            text(title, size: 13),
-            pw.SizedBox(height: 3),
-            pw.Row(
-              children: [
-                pw.Expanded(
-                  child: pw.Row(
+                  // Store name, then the document title. Invoices print without a logo.
+                  if (storeName != null && storeName.isNotEmpty)
+                    text(storeName, size: 15),
+                  text(title, size: 13),
+                  pw.SizedBox(height: 3),
+                  pw.Row(
                     children: [
-                      text('رقم: ', size: 10),
-                      pw.Flexible(
-                        child: text(
-                          invoice,
-                          size: 10,
-                          direction: pw.TextDirection.ltr,
+                      pw.Expanded(
+                        child: pw.Row(
+                          children: [
+                            text('رقم: ', size: 10),
+                            pw.Flexible(
+                              child: text(
+                                invoice,
+                                size: 10,
+                                direction: pw.TextDirection.ltr,
+                              ),
+                            ),
+                          ],
                         ),
+                      ),
+                      text(
+                        created == null
+                            ? 'غير متوفر'
+                            : '${date(created)}   ${time(created)}',
+                        size: 9,
+                        direction: pw.TextDirection.ltr,
                       ),
                     ],
                   ),
-                ),
-                text(
-                  created == null
-                      ? 'غير متوفر'
-                      : '${date(created)}   ${time(created)}',
-                  size: 9,
-                  direction: pw.TextDirection.ltr,
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 3),
-            pw.Divider(
-              height: 6,
-              thickness: .8,
-              color: lines,
-              borderStyle: pw.BorderStyle.dashed,
-            ),
-            if (customer != null &&
-                customer != 'عميل نقدي' &&
-                customer != 'زبون نقدي')
-              text('الزبون: $customer', size: 10),
-            if (order['offline_rejected'] == true)
-              text('فاتورة محلية غير معتمدة - تحتاج مراجعة', bold: true)
-            else if (order['offline_pending'] == true)
-              text('نسخة محلية - بانتظار المزامنة', size: 8),
-            pw.SizedBox(height: 4),
-            if (order['type'] != 'receipt') ...[
-              pw.Container(
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: lines, width: 1.2),
-                  borderRadius: const pw.BorderRadius.all(
-                    pw.Radius.circular(4),
+                  pw.SizedBox(height: 3),
+                  pw.Divider(
+                    height: 6,
+                    thickness: .8,
+                    color: lines,
+                    borderStyle: pw.BorderStyle.dashed,
                   ),
-                ),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-                  children: [
-                    pw.Table(
-                      border: const pw.TableBorder(
-                        horizontalInside: pw.BorderSide(
-                          color: lines,
-                          width: .6,
-                        ),
-                        verticalInside: pw.BorderSide(color: lines, width: .6),
-                      ),
-                      defaultVerticalAlignment:
-                          pw.TableCellVerticalAlignment.middle,
-                      columnWidths: {
-                        0: const pw.FlexColumnWidth(1.25),
-                        1: const pw.FlexColumnWidth(1.2),
-                        2: const pw.FlexColumnWidth(.95),
-                        3: const pw.FlexColumnWidth(2.4),
-                        4: const pw.FlexColumnWidth(.6),
-                      },
-                      children: [
-                        pw.TableRow(
-                          decoration: const pw.BoxDecoration(color: shade),
-                          children: [
-                            cell('الإجمالي', heading: true),
-                            cell('سعر الوحدة', heading: true),
-                            cell('الكمية', heading: true),
-                            cell('الصنف', heading: true),
-                            cell('رقم', heading: true),
-                          ],
-                        ),
-                        ...items.asMap().entries.map((entry) {
-                          final item = entry.value;
-                          final count = SaleData.number(item['quantity']) ?? 0;
-                          final sum = lineTotal(item);
-                          final price = count > 0
-                              ? sum / count
-                              : SaleData.number(item['price']) ?? 0;
-                          final name =
-                              "${item['name'] ?? 'منتج'}${item['gift'] == true || item['is_gift'] == true ? ' (هدية)' : ''}";
-                          final unit = item['unit'];
-                          final unitName = unit is Map ? unit['name'] : unit;
-                          return pw.TableRow(
-                            children: [
-                              cell(amount(sum)),
-                              cell(amount(price)),
-                              cell(
-                                '${quantity(count)}${unitName == null ? '' : ' $unitName'}',
-                                rtl: true,
-                              ),
-                              pw.Padding(
-                                padding: const pw.EdgeInsets.symmetric(
-                                  vertical: 4,
-                                  horizontal: 3,
-                                ),
-                                child: pw.Text(
-                                  name,
-                                  textDirection: pw.TextDirection.rtl,
-                                  textAlign: pw.TextAlign.right,
-                                  style: pw.TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: pw.FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              cell('${entry.key + 1}'),
-                            ],
-                          );
-                        }),
-                      ],
-                    ),
-                    // The total closes the table in a shaded row.
+                  if (customer != null &&
+                      customer != 'عميل نقدي' &&
+                      customer != 'زبون نقدي')
+                    text('الزبون: $customer', size: 10),
+                  if (order['offline_rejected'] == true)
+                    text('فاتورة محلية غير معتمدة - تحتاج مراجعة', bold: true)
+                  else if (order['offline_pending'] == true)
+                    text('نسخة محلية - بانتظار المزامنة', size: 8),
+                  pw.SizedBox(height: 4),
+                  if (order['type'] != 'receipt') ...[
                     pw.Container(
-                      decoration: const pw.BoxDecoration(
-                        color: shade,
-                        border: pw.Border(
-                          top: pw.BorderSide(color: lines, width: 1.2),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: lines, width: 1.2),
+                        borderRadius: const pw.BorderRadius.all(
+                          pw.Radius.circular(4),
                         ),
                       ),
-                      padding: const pw.EdgeInsets.symmetric(
-                        vertical: 5,
-                        horizontal: 6,
-                      ),
-                      child: pw.Row(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                         children: [
-                          text('الإجمالي:', size: 13),
-                          pw.Spacer(),
-                          text(
-                            amount(total),
-                            size: 15,
-                            direction: pw.TextDirection.ltr,
+                          pw.Table(
+                            border: const pw.TableBorder(
+                              horizontalInside: pw.BorderSide(
+                                color: lines,
+                                width: .6,
+                              ),
+                              verticalInside: pw.BorderSide(
+                                color: lines,
+                                width: .6,
+                              ),
+                            ),
+                            defaultVerticalAlignment:
+                                pw.TableCellVerticalAlignment.middle,
+                            columnWidths: {
+                              0: const pw.FlexColumnWidth(1.25),
+                              1: const pw.FlexColumnWidth(1.2),
+                              2: const pw.FlexColumnWidth(.95),
+                              3: const pw.FlexColumnWidth(2.4),
+                              4: const pw.FlexColumnWidth(.6),
+                            },
+                            children: [
+                              pw.TableRow(
+                                decoration: const pw.BoxDecoration(
+                                  color: shade,
+                                ),
+                                children: [
+                                  cell('الإجمالي', heading: true),
+                                  cell('سعر الوحدة', heading: true),
+                                  cell('الكمية', heading: true),
+                                  cell('الصنف', heading: true),
+                                  cell('رقم', heading: true),
+                                ],
+                              ),
+                              ...items.asMap().entries.map((entry) {
+                                final item = entry.value;
+                                final count =
+                                    SaleData.number(item['quantity']) ?? 0;
+                                final sum = lineTotal(item);
+                                final price = count > 0
+                                    ? sum / count
+                                    : SaleData.number(item['price']) ?? 0;
+                                final name =
+                                    "${item['name'] ?? 'منتج'}${item['gift'] == true || item['is_gift'] == true ? ' (هدية)' : ''}";
+                                final unit = item['unit'];
+                                final unitName = unit is Map
+                                    ? unit['name']
+                                    : unit;
+                                return pw.TableRow(
+                                  children: [
+                                    cell(amount(sum)),
+                                    cell(amount(price)),
+                                    cell(
+                                      '${quantity(count)}${unitName == null ? '' : ' $unitName'}',
+                                      rtl: true,
+                                    ),
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.symmetric(
+                                        vertical: 4,
+                                        horizontal: 3,
+                                      ),
+                                      child: pw.Text(
+                                        name,
+                                        textDirection: pw.TextDirection.rtl,
+                                        textAlign: pw.TextAlign.right,
+                                        style: pw.TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: pw.FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    cell('${entry.key + 1}'),
+                                  ],
+                                );
+                              }),
+                            ],
+                          ),
+                          // The total closes the table in a shaded row.
+                          pw.Container(
+                            decoration: const pw.BoxDecoration(
+                              color: shade,
+                              border: pw.Border(
+                                top: pw.BorderSide(color: lines, width: 1.2),
+                              ),
+                            ),
+                            padding: const pw.EdgeInsets.symmetric(
+                              vertical: 5,
+                              horizontal: 6,
+                            ),
+                            child: pw.Row(
+                              children: [
+                                text('الإجمالي:', size: 13),
+                                pw.Spacer(),
+                                text(
+                                  amount(total),
+                                  size: 15,
+                                  direction: pw.TextDirection.ltr,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
+                    pw.SizedBox(height: 4),
+                    // Under an invoice only: discount, payment, previous and new balance.
+                    if (discount.abs() > .004) ...[
+                      box(
+                        'المجموع قبل الخصم',
+                        total + discount,
+                        unit: currency,
+                      ),
+                      box('الخصم', discount, unit: currency),
+                    ],
+                    box('دفعة', payment, unit: currency),
+                    if (currentBalance != null) ...[
+                      box('رصيد سابق', previousBalance ?? 0, unit: currency),
+                      box(
+                        'رصيد جديد',
+                        currentBalance,
+                        prominent: true,
+                        unit: currency,
+                      ),
+                    ],
                   ],
-                ),
-              ),
-              pw.SizedBox(height: 4),
-              // Under an invoice only: discount, payment, previous and new balance.
-              if (discount.abs() > .004) ...[
-                box('المجموع قبل الخصم', total + discount, unit: currency),
-                box('الخصم', discount, unit: currency),
-              ],
-              box('دفعة', payment, unit: currency),
-              if (currentBalance != null) ...[
-                box('رصيد سابق', previousBalance ?? 0, unit: currency),
-                box(
-                  'رصيد جديد',
-                  currentBalance,
-                  prominent: true,
-                  unit: currency,
-                ),
-              ],
-            ],
-            if (order['type'] == 'receipt')
-              box('المبلغ المقبوض', total, prominent: true, unit: currency),
-            if (order['type'] == 'receipt' && currentBalance != null)
-              box(
-                order['type'] == 'receipt'
-                    ? (currentBalance < -.001 &&
+                  if (order['type'] == 'receipt')
+                    box(
+                      'المبلغ المقبوض',
+                      total,
+                      prominent: true,
+                      unit: currency,
+                    ),
+                  if (order['type'] == 'receipt' && currentBalance != null)
+                    box(
+                      order['type'] == 'receipt'
+                          ? (currentBalance < -.001 &&
+                                    order['party']?['type'] != 'supplier'
+                                ? 'رصيد لصالح الزبون بعد السند'
+                                : 'الرصيد المتبقي على الزبون بعد السند')
+                          : 'الرصيد الحالي على الزبون',
+                      currentBalance < -.001 &&
                               order['party']?['type'] != 'supplier'
-                          ? 'رصيد لصالح الزبون بعد السند'
-                          : 'الرصيد المتبقي على الزبون بعد السند')
-                    : 'الرصيد الحالي على الزبون',
-                currentBalance < -.001 && order['party']?['type'] != 'supplier'
-                    ? -currentBalance
-                    : currentBalance,
-                unit: currency,
+                          ? -currentBalance
+                          : currentBalance,
+                      unit: currency,
+                    ),
+                  if (order['notes']?.toString().trim().isNotEmpty == true) ...[
+                    pw.SizedBox(height: 5),
+                    text('ملاحظات: ${order['notes']}'),
+                  ],
+                ],
               ),
-            if (order['notes']?.toString().trim().isNotEmpty == true) ...[
-              pw.SizedBox(height: 5),
-              text('ملاحظات: ${order['notes']}'),
-            ],
-          ],
-        ),
       ),
     );
     return doc.save();
