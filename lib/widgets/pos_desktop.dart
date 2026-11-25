@@ -1277,14 +1277,13 @@ extension _ReferenceDesktop on _PosWorkspaceState {
                   ),
                 ),
                 SizedBox(
-                  width: 56,
+                  width: 80,
                   child: Text(
                     'المتوفر',
                     textAlign: TextAlign.center,
                     style: headerStyle,
                   ),
                 ),
-                const Spacer(flex: 276),
               ],
             ),
           ),
@@ -1461,7 +1460,7 @@ extension _ReferenceDesktop on _PosWorkspaceState {
                 ),
               ),
               SizedBox(
-                width: 56,
+                width: 80,
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -1472,19 +1471,27 @@ extension _ReferenceDesktop on _PosWorkspaceState {
                       color: soldOut ? _Web.rose100 : _Web.slate50,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
-                      _stockLabel(product),
-                      textDirection: TextDirection.ltr,
-                      style: _Web.text(
-                        9,
-                        color: soldOut ? _Web.rose700 : _Web.emerald700,
-                        mono: true,
+                    // One number, as on the web; both only when the branch and the shared stock differ.
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        stock.total == null ||
+                                stock.local == null ||
+                                (stock.local! - stock.total!).abs() < .005
+                            ? _quantity(stock.local ?? stock.total)
+                            : _stockLabel(product),
+                        maxLines: 1,
+                        textDirection: TextDirection.ltr,
+                        style: _Web.text(
+                          9,
+                          color: soldOut ? _Web.rose700 : _Web.emerald700,
+                          mono: true,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-              const Spacer(flex: 276),
             ],
           ),
         ),
