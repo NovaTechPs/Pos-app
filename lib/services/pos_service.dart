@@ -1,4 +1,3 @@
-
 import 'api_config.dart';
 
 import 'api_client.dart';
@@ -6,6 +5,10 @@ import 'api_exception.dart';
 
 class PosService {
   bool supportsGiftLines = false;
+
+  /// False only when the server says this cashier may not sell under cost (`pos.sell_below_cost`);
+  /// an older server that does not say keeps the earlier behaviour.
+  bool canSellBelowCost = true;
   bool lastFetchOffline = false;
   bool supportsOfflineSales = false;
   Uri? _freshCatalogUri;
@@ -83,6 +86,7 @@ class PosService {
     lastFetchOffline = response.headers['x-wasla-offline'] == 'true';
     supportsOfflineSales = data['offline_contract_version'] == 1;
     supportsGiftLines = data['pos_line_contract_version'] == 2;
+    canSellBelowCost = data['can_sell_below_cost'] != false;
     if (data['categories'] is! List) {
       throw const ApiException('تعذر قراءة قائمة الأصناف.');
     }

@@ -50,6 +50,8 @@ void main() {
     void Function(Map<String, dynamic>)? onHold,
     bool lineContract = false,
     int catalogSize = 2,
+    String? costPrice,
+    bool? canSellBelowCost,
     double? localStock,
     double? sharedStock,
     String Function()? catalogName,
@@ -82,6 +84,7 @@ void main() {
       if (request.url.path.endsWith('/pos/products')) {
         return response({
           if (lineContract) 'pos_line_contract_version': 2,
+          'can_sell_below_cost': ?canSellBelowCost,
           'offline_contract_version': 1,
           'categories': [
             {
@@ -94,6 +97,7 @@ void main() {
                   'shared_stock_quantity': ?sharedStock,
                   'name': catalogName?.call() ?? 'قهوة',
                   'barcode': '00123',
+                  'cost_price': ?costPrice,
                   if (hasAddedBarcode?.call() == true) 'barcodes': ['00AbC'],
                   'pricing_branch_id':
                       request.url.queryParameters['customer_id'] == '5' ? 2 : 1,
@@ -2070,6 +2074,72 @@ void main() {
       expect(submitted?['delivery_customer_address'], 'الخليل');
       expect(submitted?['delivery_party_id'], 5);
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  Future<void> sellUnderCost(WidgetTester tester) async {
+    await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('pos-barcode-input')), '00123');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+    'a sale under cost asks for confirmation like the web before it is sent',
+    (tester) async {
+      Map<String, dynamic>? submitted;
+      mockServer(
+        lineContract: true,
+        costPrice: '12.50',
+        canSellBelowCost: true,
+        onSale: (body) async {
+          submitted = body;
+          return response({
+            'order': {'id': 9, 'invoice_number': 'SALE-9', 'total': 10},
+          }, 201);
+        },
+      );
+      await sellUnderCost(tester);
+
+      expect(submitted, isNull);
+      expect(find.byKey(const Key('pos-below-cost-dialog')), findsOneWidget);
+      expect(find.text('10.00 / 12.50'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('pos-below-cost-cancel')));
+      await tester.pumpAndSettle();
+      expect(submitted, isNull, reason: 'cancel keeps the invoice open');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pos-below-cost-confirm')));
+      await tester.pumpAndSettle();
+      expect(submitted?['total_amount'], 10);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'a cashier without the below cost permission cannot save a sale under cost',
+    (tester) async {
+      Map<String, dynamic>? submitted;
+      mockServer(
+        lineContract: true,
+        costPrice: '12.50',
+        canSellBelowCost: false,
+        onSale: (body) async {
+          submitted = body;
+          return response({
+            'order': {'id': 9},
+          }, 201);
+        },
+      );
+      await sellUnderCost(tester);
+
+      expect(find.byKey(const Key('pos-below-cost-dialog')), findsNothing);
+      expect(find.text('لا تملك صلاحية البيع بأقل من التكلفة.'), findsWidgets);
+      expect(submitted, isNull);
     },
   );
 }

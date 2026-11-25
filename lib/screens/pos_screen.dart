@@ -639,6 +639,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         _customers = results[1] as List;
         _activeShift = results[2] as Map<String, dynamic>?;
         _posService.supportsGiftLines = service.supportsGiftLines;
+        _posService.canSellBelowCost = service.canSellBelowCost;
         if (_selectedCategoryId != null &&
             !_categories.any(
               (category) => SaleData.id(category['id']) == _selectedCategoryId,
@@ -2622,6 +2623,20 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         _grandTotal < 0) {
       _showMessage('تحقق من الفرع والوردية وقيمة الفاتورة', isError: true);
       return;
+    }
+    // As on the web, a line priced under its cost needs `pos.sell_below_cost` and a confirmation.
+    final belowCost = belowCostLines(_cart);
+    if (belowCost.isNotEmpty) {
+      if (!_posService.canSellBelowCost) {
+        _showMessage('لا تملك صلاحية البيع بأقل من التكلفة.', isError: true);
+        return;
+      }
+      final confirmed = await showBelowCostDialog(context, lines: belowCost);
+      if (!mounted) return;
+      if (!confirmed) {
+        _restoreBarcodeFocus();
+        return;
+      }
     }
     // As on the web, a sale with a delivery fee asks for the recipient and the delivery company
     // first; the window's «حفظ» or «حفظ وطباعة» decides whether the receipt prints.
