@@ -18,6 +18,7 @@ import '../services/api_client.dart';
 import '../services/barcode_service.dart';
 
 part 'pos_desktop.dart';
+part 'pos_delivery_dialog.dart';
 
 /// Shared POS layout: catalog and cart use the same controls at every width.
 class PosWorkspace extends StatefulWidget {

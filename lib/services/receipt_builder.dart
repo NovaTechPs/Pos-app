@@ -119,6 +119,34 @@ abstract final class ReceiptBuilder {
         SaleData.number(order['current_balance']) ??
         SaleData.number(order['party']?['current_balance']);
     final customer = order['party']?['name'] ?? order['customer_name'];
+    // A delivery sale prints «معلومات التوصيل» as on the web receipt; its note leaves the invoice notes.
+    const deliveryPrefix = 'ملاحظة التوصيل: ';
+    var invoiceNotes = '${order['notes'] ?? ''}'.trim();
+    var deliveryNote = '${order['delivery_notes'] ?? ''}'.trim();
+    final deliveryAt = invoiceNotes.indexOf(deliveryPrefix);
+    if (deliveryAt >= 0) {
+      if (deliveryNote.isEmpty) {
+        deliveryNote = invoiceNotes
+            .substring(deliveryAt + deliveryPrefix.length)
+            .trim();
+      }
+      invoiceNotes = invoiceNotes.substring(0, deliveryAt).trim();
+    }
+    final isDelivery =
+        order['type'] != 'receipt' &&
+        ((SaleData.number(order['delivery_fee']) ?? 0) > 0 ||
+            order['delivery_party_id'] != null) &&
+        (order['delivery_party_id'] != null || deliveryNote.isNotEmpty);
+    String field(String deliveryKey, String orderKey) =>
+        '${order[deliveryKey] ?? order[orderKey] ?? ''}'.trim();
+    final delivery = isDelivery
+        ? [
+            ('الاسم', field('delivery_customer_name', 'customer_name')),
+            ('الهاتف', field('delivery_customer_phone', 'customer_phone')),
+            ('العنوان', field('delivery_customer_address', 'customer_address')),
+            ('ملاحظة التوصيل', deliveryNote),
+          ].where((row) => row.$2.isNotEmpty).toList()
+        : const <(String, String)>[];
     final discount =
         SaleData.number(order['discount'] ?? order['discount_amount']) ?? 0;
     // Without a customer account, cash handed back as change is not a payment.
@@ -222,6 +250,34 @@ abstract final class ReceiptBuilder {
                       customer != 'عميل نقدي' &&
                       customer != 'زبون نقدي')
                     text('الزبون: $customer', size: 10),
+                  if (delivery.isNotEmpty)
+                    pw.Container(
+                      margin: const pw.EdgeInsets.only(top: 3, bottom: 4),
+                      padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 3,
+                      ),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(
+                          color: lines,
+                          width: .8,
+                          style: pw.BorderStyle.dashed,
+                        ),
+                      ),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                        children: [
+                          // The bold receipt font drops some final letters (ت), so this heading prints regular.
+                          text('معلومات التوصيل', size: 10, bold: false),
+                          for (final row in delivery)
+                            pw.Text(
+                              '${row.$1}: ${row.$2}',
+                              textAlign: pw.TextAlign.right,
+                              style: const pw.TextStyle(fontSize: 10),
+                            ),
+                        ],
+                      ),
+                    ),
                   if (order['offline_rejected'] == true)
                     text('فاتورة محلية غير معتمدة - تحتاج مراجعة', bold: true)
                   else if (order['offline_pending'] == true)
@@ -383,9 +439,9 @@ abstract final class ReceiptBuilder {
                           : currentBalance,
                       unit: currency,
                     ),
-                  if (order['notes']?.toString().trim().isNotEmpty == true) ...[
+                  if (invoiceNotes.isNotEmpty) ...[
                     pw.SizedBox(height: 5),
-                    text('ملاحظات: ${order['notes']}'),
+                    text('ملاحظات: $invoiceNotes'),
                   ],
                 ],
               ),

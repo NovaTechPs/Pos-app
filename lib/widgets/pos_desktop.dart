@@ -711,7 +711,9 @@ extension _ReferenceDesktop on _PosWorkspaceState {
     final owing = paidEntered && change < -.005;
     return Container(
       key: const Key('pos-payment-footer'),
-      height: 151,
+      // As on the web, the recipient name sits beside the customer button, so the row stays short
+      // and the invoice lines above get the room.
+      height: 118,
       padding: const EdgeInsets.fromLTRB(8, 8, 0, 8),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -735,62 +737,79 @@ extension _ReferenceDesktop on _PosWorkspaceState {
                 children: [
                   Text('الزبون', style: _Web.text(10, weight: FontWeight.w900)),
                   const SizedBox(height: 6),
-                  CustomerPicker(
-                    customers: widget.customers,
-                    value: widget.customerId,
-                    placeholder: 'إضافة زبون للفاتورة',
-                    onRefresh: widget.onRefreshCustomers,
-                    onChanged: widget.onCustomer,
-                    appearance: (name, chosen) => Container(
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(color: _Web.blue200, width: .8),
-                        borderRadius: BorderRadius.circular(12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CustomerPicker(
+                          customers: widget.customers,
+                          value: widget.customerId,
+                          placeholder: 'إضافة زبون للفاتورة',
+                          onRefresh: widget.onRefreshCustomers,
+                          onChanged: widget.onCustomer,
+                          appearance: (name, chosen) => Container(
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(
+                                color: _Web.blue200,
+                                width: .8,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '👤',
+                                  style: _Web.text(12, color: _Web.blue700),
+                                ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: _Web.text(
+                                      12,
+                                      weight: FontWeight.w900,
+                                      color: _Web.blue700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text('👤', style: _Web.text(12, color: _Web.blue700)),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: _Web.text(
-                                12,
-                                weight: FontWeight.w900,
-                                color: _Web.blue700,
+                      // The web hides the recipient name on a delivery sale: the delivery
+                      // window names the recipient instead.
+                      if (widget.onRecipientName != null &&
+                          widget.deliveryFee <= 0) ...[
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: SizedBox(
+                            height: 38,
+                            child: Tooltip(
+                              message: 'اسم المستلم على الفاتورة',
+                              child: TextField(
+                                key: const Key('pos-recipient-name'),
+                                controller: _recipient,
+                                style: _Web.text(12, color: _Web.slate900),
+                                decoration: _Web.field(
+                                  hint: widget.customerId == null
+                                      ? 'المستلم: زبون عام'
+                                      : 'المستلم: اسم الزبون المحدد',
+                                  hintSize: 12,
+                                  radius: 8,
+                                ),
+                                onChanged: widget.onRecipientName,
                               ),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      ],
+                    ],
                   ),
-                  if (widget.onRecipientName != null) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'اسم المستلم على الفاتورة',
-                      style: _Web.text(
-                        9,
-                        weight: FontWeight.w900,
-                        color: _Web.slate600,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    SizedBox(
-                      height: 36,
-                      child: TextField(
-                        key: const Key('pos-recipient-name'),
-                        controller: _recipient,
-                        style: _Web.text(14, color: _Web.slate900),
-                        decoration: _Web.field(hint: 'زبون عام', radius: 8),
-                        onChanged: widget.onRecipientName,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),

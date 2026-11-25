@@ -101,6 +101,9 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   String _recipientName = '';
   double _discount = 0.0;
   double _deliveryFee = 0;
+
+  /// Web «بيانات التوصيل»: the recipient and delivery company of a sale with a delivery fee.
+  DeliveryDetails? _deliveryDetails;
   double? _discountPercent;
   bool _discountValid = true;
   bool _tenderValid = true;
@@ -163,6 +166,8 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       'customer_id': viewing ? null : _selectedCustomerId,
       'discount': viewing ? 0 : _discount,
       'delivery_fee': viewing ? 0 : _deliveryFee,
+      if (!viewing && _deliveryDetails != null)
+        ..._deliveryDetails!.toPayload(),
       'discount_percent': viewing ? null : _discountPercent,
       'notes': viewing ? '' : _invoiceNotes,
       'payment_method': _paymentMethod,
@@ -356,6 +361,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         _deliveryFee = SaleData.number(draft['delivery_fee']) ?? 0;
         _discountPercent = SaleData.number(draft['discount_percent']);
         _invoiceNotes = draft['notes']?.toString() ?? '';
+        _restoreDelivery(draft);
         _paymentMethod = draft['payment_method']?.toString() ?? 'cash';
         _activeHeldOrderId = SaleData.id(draft['held_order_id']);
         _editingInvoiceId = SaleData.id(draft['invoice_id']);
@@ -1364,6 +1370,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
           _discountPercent = null;
           _discount = 0;
           _deliveryFee = 0;
+          _deliveryDetails = null;
           _discountValid = true;
         });
         _showMessage('تم تعليق الفاتورة محلياً على هذا الجهاز.');
@@ -1411,6 +1418,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
           _discountPercent = null;
           _discount = 0;
           _deliveryFee = 0;
+          _deliveryDetails = null;
           _discountValid = true;
         });
       }
@@ -1517,6 +1525,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
                               order['customer_id'],
                             );
                             _invoiceNotes = order['notes']?.toString() ?? '';
+                            _restoreDelivery(order);
                             _discountPercent = null;
                             _discount = SaleData.number(order['discount']) ?? 0;
                             _deliveryFee =
@@ -1567,6 +1576,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         _discountPercent = null;
         _discount = 0;
         _deliveryFee = 0;
+        _deliveryDetails = null;
         _discountValid = true;
         _activeHeldOrderId = null;
         _localHeldId = null;
@@ -1727,6 +1737,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         _discountPercent = null;
         _discount = 0;
         _deliveryFee = 0;
+        _deliveryDetails = null;
         _discountValid = true;
       }
     });
@@ -1769,6 +1780,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         _discountPercent = null;
         _discount = 0;
         _deliveryFee = 0;
+        _deliveryDetails = null;
         _discountValid = true;
         _activeHeldOrderId = null;
         _localHeldId = null;
@@ -1786,6 +1798,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         _discountPercent = null;
         _discount = 0;
         _deliveryFee = 0;
+        _deliveryDetails = null;
         _discountValid = true;
       }
     });
@@ -1812,6 +1825,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
           _discountPercent = null;
           _discount = 0;
           _deliveryFee = 0;
+          _deliveryDetails = null;
           _discountValid = true;
           _activeHeldOrderId = null;
           _localHeldId = null;
@@ -1865,6 +1879,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
         _discountPercent = null;
         _discount = 0;
         _deliveryFee = 0;
+        _deliveryDetails = null;
         _discountValid = true;
         if (!saved) {
           _cart.addAll(
@@ -2137,6 +2152,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       _discount = SaleData.number(order['discount']) ?? 0;
       _deliveryFee = SaleData.number(order['delivery_fee']) ?? 0;
       _invoiceNotes = order['notes']?.toString() ?? '';
+      _restoreDelivery(order);
     });
   }
 
@@ -2178,6 +2194,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       _discountPercent = null;
       _discount = 0;
       _deliveryFee = 0;
+      _deliveryDetails = null;
       _discountValid = true;
     });
     _restoreBarcodeFocus();
@@ -2323,6 +2340,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
           _discountPercent = null;
           _discount = 0;
           _deliveryFee = 0;
+          _deliveryDetails = null;
           _invoiceNotes = '';
           _recipientName = '';
         });
@@ -2444,6 +2462,62 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
     });
   }
 
+  /// Reads the delivery details a draft or saved invoice carries, and keeps its delivery note
+  /// out of the invoice notes, so saving it again does not repeat the note. Called inside setState.
+  void _restoreDelivery(Map order) {
+    const prefix = 'ملاحظة التوصيل: ';
+    var notes = order['notes']?.toString() ?? '';
+    var deliveryNote = order['delivery_notes']?.toString() ?? '';
+    final at = notes.indexOf(prefix);
+    if (at >= 0) {
+      if (deliveryNote.isEmpty) {
+        deliveryNote = notes.substring(at + prefix.length).trim();
+      }
+      notes = notes.substring(0, at).trim();
+    }
+    _invoiceNotes = notes;
+    final companyId = SaleData.id(order['delivery_party_id']);
+    if ((SaleData.number(order['delivery_fee']) ?? 0) <= 0 ||
+        companyId == null) {
+      _deliveryDetails = null;
+      return;
+    }
+    final company = _customers
+        .whereType<Map>()
+        .where((party) => SaleData.id(party['id']) == companyId)
+        .firstOrNull;
+    _deliveryDetails = DeliveryDetails(
+      name:
+          '${order['delivery_customer_name'] ?? order['customer_name'] ?? ''}',
+      phone:
+          '${order['delivery_customer_phone'] ?? order['customer_phone'] ?? ''}',
+      address:
+          '${order['delivery_customer_address'] ?? order['customer_address'] ?? ''}',
+      notes: deliveryNote,
+      companyId: companyId,
+      companyName: '${company?['name'] ?? ''}',
+    );
+  }
+
+  /// The delivery window starts from what was typed before, else from the invoice's customer.
+  DeliveryDetails _deliveryPrefill() {
+    final current = _deliveryDetails;
+    final customer = _customers
+        .whereType<Map>()
+        .where((party) => SaleData.id(party['id']) == _selectedCustomerId)
+        .firstOrNull;
+    String pick(String? typed, Object? fallback) =>
+        typed != null && typed.trim().isNotEmpty ? typed : '${fallback ?? ''}';
+    return DeliveryDetails(
+      name: pick(current?.name, customer?['name']),
+      phone: pick(current?.phone, customer?['phone']),
+      address: pick(current?.address, customer?['address']),
+      notes: current?.notes ?? '',
+      companyId: current?.companyId,
+      companyName: current?.companyName ?? '',
+    );
+  }
+
   Future<void> _editDelivery() async {
     if (_refuseWhileViewing()) return;
     if (_isCheckingOut || _isRepricing) return;
@@ -2549,6 +2623,25 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       _showMessage('تحقق من الفرع والوردية وقيمة الفاتورة', isError: true);
       return;
     }
+    // As on the web, a sale with a delivery fee asks for the recipient and the delivery company
+    // first; the window's «حفظ» or «حفظ وطباعة» decides whether the receipt prints.
+    if (_deliveryFee > 0 && _deliveryDetails?.isComplete != true) {
+      final decision = await showDeliveryDetailsDialog(
+        context,
+        initial: _deliveryPrefill(),
+        parties: _customers,
+      );
+      if (!mounted) return;
+      if (decision == null) {
+        _restoreBarcodeFocus();
+        return;
+      }
+      setState(() => _deliveryDetails = decision.details);
+      printReceipt = decision.print;
+    }
+    final delivery = _deliveryFee > 0 && _deliveryDetails?.isComplete == true
+        ? _deliveryDetails
+        : null;
     final serverItems = _serverItems();
     if (serverItems == null) return;
     setState(() => _isCheckingOut = true);
@@ -2581,10 +2674,13 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
           if (_invoiceNotes.isNotEmpty) 'notes': _invoiceNotes,
           'payment_method': _paymentMethod,
           'items': serverItems,
+          ...?delivery?.toPayload(),
         },
         receiptItems: items,
         cashierName: widget.user['name']?.toString() ?? 'كاشير',
-        customerName: _recipientName.trim().isNotEmpty
+        customerName: delivery != null
+            ? delivery.name.trim()
+            : _recipientName.trim().isNotEmpty
             ? _recipientName.trim()
             : _customers
                   .whereType<Map>()
@@ -2607,6 +2703,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
           _discountPercent = null;
           _discount = 0;
           _deliveryFee = 0;
+          _deliveryDetails = null;
           _discountValid = true;
           _searchQuery = '';
           _barcodeController.clear();
@@ -2701,6 +2798,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
       _discountPercent = null;
       _discount = 0;
       _deliveryFee = 0;
+      _deliveryDetails = null;
       _discountValid = true;
       _tenderValid = true;
       _barcodeController.clear();

@@ -2002,4 +2002,74 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testDesktopWidgets(
+    'a delivery sale asks for the delivery details like the web and sends them with the sale',
+    (tester) async {
+      Map<String, dynamic>? submitted;
+      mockServer(
+        lineContract: true,
+        onSale: (body) async {
+          submitted = body;
+          return response({
+            'order': {'id': 9, 'invoice_number': 'SALE-9', 'total': 15},
+          }, 201);
+        },
+      );
+      await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('pos-barcode-input')),
+        '00123',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      tester
+          .widget<PosWorkspace>(find.byType(PosWorkspace))
+          .actions['التوصيل']!();
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).first, '5');
+      await tester.tap(find.text('تأكيد'));
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+      await tester.pumpAndSettle();
+      expect(
+        submitted,
+        isNull,
+        reason: 'the delivery window opens before anything is sent',
+      );
+      expect(find.byKey(const Key('pos-delivery-dialog')), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const Key('pos-delivery-name')),
+        'مستلم',
+      );
+      await tester.enterText(
+        find.byKey(const Key('pos-delivery-phone')),
+        '0590000000',
+      );
+      await tester.enterText(
+        find.byKey(const Key('pos-delivery-address')),
+        'الخليل',
+      );
+      await tester.enterText(
+        find.byKey(const Key('pos-delivery-company')),
+        'عميل',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pos-delivery-company-5')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('pos-delivery-save')));
+      await tester.pumpAndSettle();
+
+      expect(submitted?['delivery_fee'], 5);
+      expect(submitted?['total_amount'], 15);
+      expect(submitted?['delivery_customer_name'], 'مستلم');
+      expect(submitted?['delivery_customer_phone'], '0590000000');
+      expect(submitted?['delivery_customer_address'], 'الخليل');
+      expect(submitted?['delivery_party_id'], 5);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

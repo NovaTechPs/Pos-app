@@ -64,6 +64,50 @@ void main() {
       }
     },
   );
+  test('a delivery receipt prints the delivery details and keeps the delivery note out of the notes', () async {
+    final order = {
+      'invoice_number': 'POS-DEL-1',
+      'type': 'pos',
+      'store_name': 'متجر التوصيل',
+      'customer_name': 'مستلم التوصيل',
+      'customer_phone': '0590000000',
+      'customer_address': 'الخليل - رأس الجورة',
+      'delivery_party_id': 7,
+      'delivery_fee': 5,
+      'subtotal': 20,
+      'total': 25,
+      'paid_amount': 25,
+      'notes': 'بدون سكر\n\nملاحظة التوصيل: اتصل قبل الوصول',
+    };
+    final bytes = await ReceiptBuilder.build(
+      order: order,
+      items: [
+        {'name': 'قهوة', 'quantity': 2, 'price': 10},
+      ],
+      cashierName: 'كاشير',
+    );
+    expect(bytes.take(4), [37, 80, 68, 70]);
+    // A queued offline sale carries the delivery fields of its request instead of the server's.
+    final offline = await ReceiptBuilder.build(
+      order: {
+        ...order,
+        'customer_address': null,
+        'notes': 'بدون سكر',
+        'delivery_customer_address': 'الخليل',
+        'delivery_notes': 'اتصل قبل الوصول',
+        'offline_pending': true,
+      },
+      items: [
+        {'name': 'قهوة', 'quantity': 2, 'price': 10},
+      ],
+      cashierName: 'كاشير',
+    );
+    expect(offline.take(4), [37, 80, 68, 70]);
+    if (const bool.fromEnvironment('WRITE_PDF_PREVIEWS')) {
+      Directory('tmp/pdfs').createSync(recursive: true);
+      await File('tmp/pdfs/delivery-preview.pdf').writeAsBytes(bytes);
+    }
+  });
   test('payment and balance receipt preview', () async {
     final bytes = await ReceiptBuilder.build(
       order: {
