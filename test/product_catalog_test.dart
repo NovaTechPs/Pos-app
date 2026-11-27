@@ -30,6 +30,48 @@ void main() {
       expect(ids(''), [1, 2, 3, 4, 5, 6]);
     },
   );
+  test('search ranks branch stock first, then shared stock for items out in the branch', () {
+    final catalog = ProductCatalog([
+      {
+        'products': [
+          {
+            'id': 1,
+            'name': 'شاي',
+            'stock_quantity': 0,
+            'shared_stock_quantity': 50,
+          },
+          {
+            'id': 2,
+            'name': 'شاي',
+            'stock_quantity': 3,
+            'shared_stock_quantity': 3,
+          },
+          {
+            'id': 3,
+            'name': 'شاي',
+            'stock_quantity': 0,
+            'shared_stock_quantity': 200,
+          },
+          {
+            'id': 4,
+            'name': 'شاي',
+            'stock_quantity': 10,
+            'shared_stock_quantity': 12,
+          },
+          {
+            'id': 5,
+            'name': 'شاي',
+            'stock_quantity': -2,
+            'shared_stock_quantity': 0,
+          },
+        ],
+      },
+    ]);
+    expect(
+      catalog.search('شاي', null).map((product) => product['id']).toList(),
+      [4, 2, 3, 1, 5],
+    );
+  });
   test(
     'complete barcode detection never consumes a prefix of a longer code',
     () {

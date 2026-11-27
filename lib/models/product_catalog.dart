@@ -75,19 +75,26 @@ class ProductCatalog {
   }
 
   /// Exact barcode or product number first (a scan stays on top), then from the
-  /// most to the least stock; equal items keep their catalog order.
+  /// most to the least stock in this branch; items with none in the branch follow,
+  /// from the most to the least shared stock. Equal items keep their catalog order.
   static List<dynamic> _byStock(List<_Entry> matches, String query) {
     int exact(_Entry entry) =>
         entry.codes.contains(query) ||
             normalizeSearch('${entry.product['product_number'] ?? ''}') == query
         ? 0
         : 1;
-    double stock(_Entry entry) =>
+    double local(_Entry entry) =>
         SaleData.number(entry.product['stock_quantity']) ?? 0;
+    int tier(_Entry entry) => local(entry) > 0 ? 0 : 1;
+    double stock(_Entry entry) => local(entry) > 0
+        ? local(entry)
+        : SaleData.number(entry.product['shared_stock_quantity']) ?? 0;
     final ranked = [for (var i = 0; i < matches.length; i++) (i, matches[i])];
     ranked.sort((a, b) {
       final byExact = exact(a.$2).compareTo(exact(b.$2));
       if (byExact != 0) return byExact;
+      final byTier = tier(a.$2).compareTo(tier(b.$2));
+      if (byTier != 0) return byTier;
       final byStock = stock(b.$2).compareTo(stock(a.$2));
       return byStock != 0 ? byStock : a.$1.compareTo(b.$1);
     });
