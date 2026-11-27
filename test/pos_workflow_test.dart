@@ -209,6 +209,7 @@ void main() {
       mockServer(catalogSize: 10000, onRequest: (_) => requests++);
       await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
       await tester.pumpAndSettle();
+      await groupSimilarItems(tester);
       final initialRequests = requests;
       expect(
         tester.widget<PosWorkspace>(find.byType(PosWorkspace)).products,
@@ -322,6 +323,7 @@ void main() {
       mockServer(lineContract: true);
       await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
       await tester.pumpAndSettle();
+      await groupSimilarItems(tester);
       await tester.enterText(
         find.byKey(const Key('pos-barcode-input')),
         '00123',
@@ -401,6 +403,7 @@ void main() {
       mockServer(lineContract: true);
       await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
       await tester.pumpAndSettle();
+      await groupSimilarItems(tester);
       await tester.tap(find.byKey(const Key('pos-catalog-search')));
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -619,6 +622,23 @@ void main() {
       await tester.pumpAndSettle();
       workspace = tester.widget<PosWorkspace>(find.byType(PosWorkspace));
       expect(workspace.cart.single['quantity'], 2);
+      expect(find.textContaining('اضغط «تعديل»'), findsOneWidget);
+      ScaffoldMessenger.of(tester.element(find.byType(PosWorkspace)))
+          .clearSnackBars();
+      await tester.pumpAndSettle();
+
+      // Printing, PDF and WhatsApp work on the viewed invoice without «تعديل».
+      for (final action in ['حفظ وطباعة', 'PDF', 'واتساب']) {
+        workspace.actions[action]!();
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('اضغط «تعديل»'),
+          findsNothing,
+          reason: action,
+        );
+        expect(find.textContaining('احفظ فاتورة أولاً'), findsNothing);
+      }
+      expect(find.byKey(const Key('pos-viewed-invoice')), findsOneWidget);
 
       // Older web/wholesale invoices come from the server too, but stay view-only here.
       await tester.tap(find.text('السابقة').last);
@@ -1591,6 +1611,7 @@ void main() {
       );
       await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
       await tester.pumpAndSettle();
+      await groupSimilarItems(tester);
       await tester.enterText(
         find.byKey(const Key('pos-barcode-input')),
         '00123',
@@ -1783,6 +1804,7 @@ void main() {
       mockServer(onHold: (body) => held = body);
       await tester.pumpWidget(const MaterialApp(home: PosScreen(user: user)));
       await tester.pumpAndSettle();
+      await groupSimilarItems(tester);
       await tester.enterText(
         find.byKey(const Key('pos-barcode-input')),
         '00123',
@@ -2142,4 +2164,13 @@ void main() {
       expect(submitted, isNull);
     },
   );
+}
+
+/// Turns on «تجميع الأصناف المتشابهة» for tests that add the same product twice; on Windows
+/// it starts off.
+Future<void> groupSimilarItems(WidgetTester tester) async {
+  final workspace = tester.widget<PosWorkspace>(find.byType(PosWorkspace));
+  expect(workspace.mergeSimilar, isFalse);
+  workspace.onMergeSimilar!(true);
+  await tester.pumpAndSettle();
 }

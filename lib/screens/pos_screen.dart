@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -94,7 +95,9 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   Map<String, dynamic>? _checkoutRecord;
   bool _isRestoringCheckout = true;
   String _searchQuery = '';
-  bool _mergeSimilar = true;
+
+  /// «تجميع الأصناف المتشابهة»: off by default on Windows, where the switch is shown; Android keeps grouping.
+  bool _mergeSimilar = defaultTargetPlatform != TargetPlatform.windows;
   String _invoiceNotes = '';
 
   /// Web «اسم المستلم على الفاتورة»; empty prints the customer's name.
@@ -1964,6 +1967,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _reprintLastReceipt() async {
+    if (_viewingInvoice != null) return _printViewedInvoice();
     var record = _checkoutRecord;
     final id = record?['order']?['id'];
     if (record?['status'] == 'queued' &&
@@ -2034,6 +2038,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
 
   Future<void> _exportInvoice() async {
     if (_isCheckingOut || _isRepricing) return;
+    if (_viewingInvoice != null) return _printViewedInvoice(pdf: true);
     if (_cart.isNotEmpty) {
       await _checkout(printReceipt: false);
       if (!mounted || _cart.isNotEmpty) return;
@@ -2211,7 +2216,9 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
     return true;
   }
 
-  Future<void> _printViewedInvoice({bool pdf = false}) async {
+  /// Prints, exports or shares (with [message], for WhatsApp) the saved invoice being viewed,
+  /// without unlocking it.
+  Future<void> _printViewedInvoice({bool pdf = false, String? message}) async {
     final order = _viewingInvoice;
     if (order == null) return;
     final items = SaleData.heldLines(order);
@@ -2222,6 +2229,7 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
           order: order,
           items: items,
           cashierName: widget.user['name']?.toString() ?? '—',
+          message: message,
         );
       } else {
         await PrinterService.printReceipt(
@@ -2354,6 +2362,19 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   String _invoiceText() {
+    final viewed = _viewingInvoice;
+    if (viewed != null) {
+      final text = StringBuffer('فاتورة ${viewed['invoice_number'] ?? ''}');
+      for (final line in _cart) {
+        text.write(
+          '\n${line['name']}${line['gift'] == true ? ' (هدية)' : ''} × ${line['quantity']} = ${SaleData.lineTotal(line).toStringAsFixed(2)}',
+        );
+      }
+      text.write(
+        '\nالإجمالي: ${(SaleData.number(viewed['total']) ?? _grandTotal).toStringAsFixed(2)}',
+      );
+      return text.toString();
+    }
     final record = _checkoutRecord;
     final lines = _cart.isNotEmpty
         ? _cart
@@ -2387,6 +2408,9 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
 
   Future<void> _shareWhatsApp() async {
     if (_isCheckingOut || _isRepricing) return;
+    if (_viewingInvoice != null) {
+      return _printViewedInvoice(pdf: true, message: _invoiceText());
+    }
     if (_cart.isNotEmpty) {
       await _checkout(printReceipt: false);
       if (!mounted || _cart.isNotEmpty) return;
@@ -2586,6 +2610,8 @@ class _PosScreenState extends State<PosScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _checkout({bool printReceipt = false}) async {
+    // A viewed invoice is already saved: «حفظ وطباعة» / F6 just prints it.
+    if (printReceipt && _viewingInvoice != null) return _printViewedInvoice();
     if (_refuseWhileViewing()) return;
     if (_editingInvoiceId != null && ApiClient.offline.value) {
       _showMessage('اتصل بالخادم لحفظ تعديل فاتورة سابقة.', isError: true);
