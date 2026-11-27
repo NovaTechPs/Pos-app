@@ -18,6 +18,7 @@ import 'invoice_status_screen.dart';
 import 'wholesale_receipt_screen.dart';
 import 'sync_screen.dart';
 import 'printer_settings_screen.dart';
+import 'reports_screen.dart';
 import 'barcode_labels_screen.dart';
 
 /// Keeps each department's navigation and form state alive while switching tabs.
@@ -138,6 +139,7 @@ class _PosShellState extends State<PosShell> {
           // Phones pick their paired Bluetooth printer on the first print.
           'سند قبض مستقل': WholesaleReceiptScreen(user: widget.user),
           'حالة الفواتير': const InvoiceStatusScreen(),
+          'التقارير': ReportsScreen(user: widget.user),
         }
       : {
           'نقطة البيع': PosScreen(user: widget.user),
@@ -145,6 +147,7 @@ class _PosShellState extends State<PosShell> {
           'إعدادات الطابعات': const PrinterSettingsScreen(),
           'طباعة الباركود': const BarcodeLabelsScreen(),
           'لوحة التحكم': DashboardScreen(user: widget.user),
+          'التقارير': ReportsScreen(user: widget.user),
           'مبيعات الجملة': WholesaleScreen(user: widget.user),
           'سند قبض مستقل': WholesaleReceiptScreen(user: widget.user),
           'قائمة الزيارات': CustomerVisitsScreen(user: widget.user),
@@ -574,6 +577,7 @@ class _PosShellState extends State<PosShell> {
       'الإدارة',
       [
         ('لوحة التحكم', Icons.dashboard_outlined),
+        ('التقارير', Icons.bar_chart_outlined),
         ('شؤون الموظف', Icons.badge_outlined),
         ('طباعة الباركود', Icons.qr_code_2),
       ],

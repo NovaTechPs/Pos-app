@@ -227,7 +227,9 @@ void main() {
       expect(find.byType(WholesaleScreen), findsNothing);
       await tester.tap(find.text('فتح قسم'));
       await tester.pumpAndSettle();
-      expect(find.byType(PopupMenuItem<String>), findsNWidgets(3));
+      expect(find.byType(PopupMenuItem<String>), findsNWidgets(4));
+      // In the menu and among the home page sections.
+      expect(find.text('التقارير'), findsNWidgets(2));
       expect(find.text('إعدادات الطابعات'), findsNothing);
       expect(find.text('قائمة الزيارات'), findsNothing);
       expect(find.text('سجل الفواتير'), findsNothing);
